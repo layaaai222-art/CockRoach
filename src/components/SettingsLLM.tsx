@@ -14,12 +14,14 @@ import {
   Lock,
   ChevronDown,
   Cloud,
-  AlertCircle
+  AlertCircle,
+  Upload
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function SettingsLLM() {
   const { azureConfig, setAzureConfig, currentUser, updateCurrentUser } = useAppStore();
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [activeProvider, setActiveProvider] = React.useState<string | null>('azure');
   const [profileData, setProfileData] = React.useState({
     name: currentUser?.name || '',
@@ -67,6 +69,17 @@ export default function SettingsLLM() {
     },
   ];
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProfileData({ ...profileData, avatar: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-10 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
@@ -82,22 +95,25 @@ export default function SettingsLLM() {
         <div className="layaa-card bg-card/50 backdrop-blur-sm shadow-xl ring-1 ring-primary/5 p-8">
           <div className="flex flex-col md:flex-row gap-8">
             <div className="flex flex-col items-center gap-4">
-               <div className="w-24 h-24 rounded-2xl bg-surface-mid border border-border flex items-center justify-center text-muted-foreground relative group overflow-hidden shadow-sm">
+               <div 
+                 className="w-24 h-24 rounded-2xl bg-surface-mid border border-border flex items-center justify-center text-muted-foreground relative group overflow-hidden shadow-sm cursor-pointer"
+                 onClick={() => fileInputRef.current?.click()}
+               >
                   {profileData.avatar ? (
                     <img src={profileData.avatar} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
                     <User size={32} />
                   )}
                   <div className="absolute inset-0 bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <Camera size={20} className="text-foreground" />
+                    <Upload size={20} className="text-foreground" />
                   </div>
                </div>
                <input 
-                 type="text" 
-                 placeholder="Image URL" 
-                 value={profileData.avatar}
-                 onChange={(e) => setProfileData({ ...profileData, avatar: e.target.value })}
-                 className="w-full max-w-[150px] bg-background border border-border rounded-lg py-1.5 px-3 text-[10px] text-center text-foreground focus:outline-none focus:border-primary/50 transition-all font-mono"
+                 type="file" 
+                 ref={fileInputRef}
+                 className="hidden"
+                 accept="image/*"
+                 onChange={handleImageUpload}
                />
             </div>
             
@@ -215,7 +231,26 @@ export default function SettingsLLM() {
                   <h3 className="text-lg font-bold text-foreground">Configure {activeProvider.toUpperCase()}</h3>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Strategic Identity & Key Exchange</p>
                 </div>
-                <button className="flex items-center gap-2 px-4 py-2 bg-background border border-border rounded-full text-[10px] font-bold text-muted-foreground hover:text-foreground transition-all hover:border-primary-border shadow-sm">
+                <button 
+                  onClick={async () => {
+                    if (activeProvider === 'azure') {
+                      try {
+                        const baseUrl = azureConfig.endpoint.endsWith('/') ? azureConfig.endpoint.slice(0, -1) : azureConfig.endpoint;
+                        const url = `${baseUrl}/openai/deployments/${azureConfig.deployment}/chat/completions?api-version=${azureConfig.version}`;
+                        const res = await fetch(url.replace(/([^:]\/)\/+/g, "$1"), {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'api-key': azureConfig.apiKey },
+                          body: JSON.stringify({ messages: [{ role: 'user', content: 'Ping' }], max_tokens: 5 })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error?.message || 'Connection failed');
+                        alert('Connection Successful!');
+                      } catch (e: any) {
+                        alert(`Connection Error: ${e.message}`);
+                      }
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-background border border-border rounded-full text-[10px] font-bold text-muted-foreground hover:text-foreground transition-all hover:border-primary-border shadow-sm">
                   <Activity size={14} className="text-primary" />
                   <span>TEST CONNECTION</span>
                 </button>

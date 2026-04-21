@@ -19,7 +19,9 @@ import {
   Bot,
   Sun,
   Moon,
-  Bell
+  Bell,
+  RefreshCcw,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -37,8 +39,82 @@ export default function App() {
   
   // Chat State
   const [input, setInput] = React.useState('');
-  const [messages, setMessages] = React.useState<{ role: 'user' | 'assistant', content: string }[]>([]);
+  const [messages, setMessages] = React.useState<{ role: 'user' | 'assistant', content: string | React.ReactNode, rawText?: string }[]>([]);
   const [isTyping, setIsTyping] = React.useState(false);
+  const chatScrollRef = React.useRef<HTMLDivElement>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Dummy Chat History Data
+  const [chatHistory, setChatHistory] = React.useState([
+    { 
+      id: '1', 
+      title: 'Market Entry: Logistics', 
+      messages: [
+        { role: 'user', content: 'Analyze logistics in APAC' }, 
+        { role: 'assistant', content: 'APAC logistics show a 15% CAGR with strong focus on last-mile delivery networks.' }
+      ] 
+    },
+    { 
+      id: '2', 
+      title: 'Vendor Risk Matrix', 
+      messages: [
+        { role: 'user', content: 'Evaluate vendor risks in sub-tier suppliers' }, 
+        { role: 'assistant', content: 'Vendor risks are concentrated deeply in tier-2 suppliers within the hardware segment. High exposure detected.' }
+      ] 
+    },
+    { 
+      id: '3', 
+      title: 'Q3 Financial Strategy', 
+      messages: [
+        { role: 'user', content: 'What is the Q3 projection?' }, 
+        { role: 'assistant', content: 'Q3 projections indicate a strong reliance on recurring revenue streams, stabilizing at 89% net retention.' }
+      ] 
+    }
+  ]);
+
+  React.useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [messages, isTyping]);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result;
+      const fileContentStr = typeof text === 'string' ? text : 'Binary file';
+
+      setMessages(prev => [...prev, { 
+        role: 'user', 
+        content: (
+          <div className="flex items-center gap-2 p-2 bg-background border border-border rounded-lg text-sm">
+            <Pin size={14} className="text-primary rotate-45" />
+            <span className="font-medium text-foreground">{file.name}</span>
+            <span className="text-[10px] text-muted-foreground font-mono">{(file.size / 1024).toFixed(1)} KB</span>
+          </div>
+        ),
+        rawText: `[File attached: ${file.name}]\n\nContent:\n${fileContentStr.substring(0, 3000)}`
+      }]);
+      
+      // Simulate analyzing file
+      setIsTyping(true);
+      setTimeout(() => {
+        setIsTyping(false);
+        setMessages(prev => [...prev, { role: 'assistant', content: `I have ingested "${file.name}" and extracted its contents. The telemetry data has been injected into our current context. You may now query against it.` }]);
+      }, 1500);
+    };
+
+    // Assuming text files, CSVs, or JSON for standard processing
+    reader.readAsText(file);
+    
+    // Clear input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!input.trim() || isTyping) return;
@@ -60,9 +136,13 @@ export default function App() {
           'api-key': azureConfig.apiKey
         },
         body: JSON.stringify({
+          model: azureConfig.deployment || azureConfig.model,
           messages: [
             { role: 'system', content: `You are CockRoach, a strategic intelligence platform. The user is ${currentUser?.name}. ${isBrutalHonesty ? 'Respond with brutal honesty, highlighting flaws directly.' : ''}` },
-            ...newMessages
+            ...newMessages.map(m => ({
+              role: m.role,
+              content: m.rawText ? m.rawText : (typeof m.content === 'string' ? m.content : '[File Attached]')
+            }))
           ],
           temperature: 0.7,
         })
@@ -121,7 +201,13 @@ export default function App() {
 
         {/* Action Button - New Chat */}
         <div className="p-3">
-          <button className="w-full flex items-center justify-center gap-2 bg-primary text-white text-sm font-semibold h-10 rounded-xl hover:brightness-110 active:scale-[0.98] transition-all shadow-sm shadow-primary/20">
+          <button 
+            onClick={() => {
+              setMessages([]);
+              setCurrentPage('chat');
+            }} 
+            className="w-full flex items-center justify-center gap-2 bg-primary text-white text-sm font-semibold h-10 rounded-xl hover:brightness-110 active:scale-[0.98] transition-all shadow-sm shadow-primary/20"
+          >
             <Plus size={16} />
             <span>New Conversation</span>
           </button>
@@ -163,10 +249,17 @@ export default function App() {
           <div className="pt-2">
             <h4 className="px-3 mb-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">History</h4>
             <div className="space-y-0.5">
-              {[1, 2, 3].map((i) => (
-                <button key={i} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-muted-foreground hover:bg-card/60 hover:text-foreground rounded-lg transition-all group">
+              {chatHistory.map((historyItem) => (
+                <button 
+                  key={historyItem.id} 
+                  onClick={() => {
+                    setMessages(historyItem.messages as any);
+                    setCurrentPage('chat');
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-muted-foreground hover:bg-card/60 hover:text-foreground rounded-lg transition-all group"
+                >
                    <div className="w-1.5 h-1.5 rounded-full bg-border group-hover:bg-primary/50 transition-colors" />
-                   <span className="truncate flex-1 text-left">Market Entry: Logistics</span>
+                   <span className="truncate flex-1 text-left">{historyItem.title}</span>
                 </button>
               ))}
             </div>
@@ -195,6 +288,13 @@ export default function App() {
                 )}
               >
                 <Settings size={16} />
+              </button>
+              <button 
+                onClick={() => setIsAuthenticated(false)}
+                className="p-1.5 rounded-lg transition-all text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                title="Logout"
+              >
+                <LogOut size={16} />
               </button>
            </div>
         </div>
@@ -248,9 +348,33 @@ export default function App() {
            </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-6 py-6 layaa-scroll pb-32">
+        <div className="flex-1 overflow-y-auto px-6 py-6 layaa-scroll pb-32" ref={chatScrollRef}>
           {currentPage === 'settings' ? (
             <SettingsLLM />
+          ) : currentPage === 'research' ? (
+            <div className="max-w-3xl mx-auto flex flex-col items-center justify-center min-h-full space-y-4 animate-in fade-in slide-in-from-bottom-5">
+              <Search size={48} className="text-primary opacity-50" />
+              <h2 className="text-xl font-bold text-foreground">Deep Research Module</h2>
+              <p className="text-muted-foreground text-sm max-w-md text-center">
+                Configure your search vectors and target parameters below. This module is undergoing calibration.
+              </p>
+            </div>
+          ) : currentPage === 'memory' ? (
+            <div className="max-w-3xl mx-auto flex flex-col items-center justify-center min-h-full space-y-4 animate-in fade-in slide-in-from-bottom-5">
+              <Brain size={48} className="text-primary opacity-50" />
+              <h2 className="text-xl font-bold text-foreground">Strategic Memory Bank</h2>
+              <p className="text-muted-foreground text-sm max-w-md text-center">
+                Review and modify your CockRoach neural memory embeddings.
+              </p>
+            </div>
+          ) : currentPage === 'projects' ? (
+            <div className="max-w-3xl mx-auto flex flex-col items-center justify-center min-h-full space-y-4 animate-in fade-in slide-in-from-bottom-5">
+              <FolderKanban size={48} className="text-primary opacity-50" />
+              <h2 className="text-xl font-bold text-foreground">Macro Projects Pipeline</h2>
+              <p className="text-muted-foreground text-sm max-w-md text-center">
+                Active operations and strategic blueprints will appear here. No active projects detected.
+              </p>
+            </div>
           ) : (
             <div className="max-w-3xl mx-auto flex flex-col items-center justify-center min-h-full space-y-6">
               {messages.length === 0 ? (
@@ -319,7 +443,7 @@ export default function App() {
                           <Bot size={16} className="text-primary" />
                         )}
                       </div>
-                      <div className="text-[14px] leading-relaxed text-foreground whitespace-pre-wrap">
+                      <div className="text-[14px] leading-relaxed text-foreground whitespace-pre-wrap overflow-hidden break-words max-w-full">
                         {msg.content}
                       </div>
                     </motion.div>
@@ -362,8 +486,28 @@ export default function App() {
                   />
                   <div className="flex items-center justify-between px-4 py-2 bg-surface-mid border-t border-border/50">
                     <div className="flex items-center gap-2">
-                       <button className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-background rounded-lg transition-all">
+                       <input 
+                         type="file" 
+                         ref={fileInputRef} 
+                         className="hidden" 
+                         onChange={handleFileUpload} 
+                       />
+                       <button 
+                         onClick={() => fileInputRef.current?.click()} 
+                         className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-background rounded-lg transition-all"
+                         title="Attach File"
+                       >
                         <Plus size={18} />
+                       </button>
+                       <button 
+                         onClick={() => {
+                           setMessages([]);
+                           setInput('');
+                         }} 
+                         className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-all"
+                         title="Clear Conversation"
+                       >
+                        <Trash2 size={18} />
                        </button>
                        <div className="h-4 w-[1px] bg-border mx-1" />
                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-background border border-border rounded-full shadow-sm">
