@@ -104,7 +104,7 @@ export function useShareLink({
           setSharedChatBanner(`Share link active — this is your shared chat "${data.title}"`);
         }
       });
-  }, [currentUser, setActiveChatId, setCurrentPage, setSharedChatBanner]);
+  }, [currentUser, setActiveChatId, setCurrentPage, setSharedChatBanner, setSharedViewChatId]);
 
   return { shareLink, setShareLink, createOrGetLink, revokeLink };
 }

@@ -351,6 +351,7 @@ export default function App() {
         const extracted = textParts
         .join('')
         .replace(/\s{3,}/g, '\n\n')
+        // eslint-disable-next-line no-control-regex
         .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '')
         .trim();
         const content = extracted.length > 80
@@ -368,6 +369,7 @@ export default function App() {
         // Strip null bytes, lone surrogates, and non-printable control chars to prevent Supabase JSON errors
         const content = raw
         .replace(/\0/g, '')
+        // eslint-disable-next-line no-control-regex
         .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
         .substring(0, 8000);
 
