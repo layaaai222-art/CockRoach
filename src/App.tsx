@@ -311,13 +311,64 @@ export default function App() {
     if (!file) return;
     if (fileInputRef.current) fileInputRef.current.value = '';
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result;
-      const content = typeof text === 'string' ? text : '[Binary file — cannot extract text]';
-      setPendingFile({ name: file.name, size: file.size, content: content.substring(0, 8000) });
-    };
-    reader.readAsText(file);
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+    if (isPdf) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const buffer = event.target?.result;
+        if (!(buffer instanceof ArrayBuffer)) {
+          setPendingFile({ name: file.name, size: file.size, content: '[PDF — could not read file]' });
+          return;
+        }
+        // Decode as latin-1 to safely get raw bytes as a string
+        const raw = new TextDecoder('latin-1').decode(buffer);
+
+        // Extract text from PDF BT...ET blocks (text object operator pairs)
+        const textParts: string[] = [];
+        const btEtRe = /BT[\s\S]*?ET/g;
+        let block: RegExpExecArray | null;
+        while ((block = btEtRe.exec(raw)) !== null && textParts.join('').length < 12000) {
+          const tjRe = /\(([^)\\]*(?:\\.[^)\\]*)*)\)\s*(?:Tj|'|")|<([0-9a-fA-F]+)>\s*Tj|\[([\s\S]*?)\]\s*TJ/g;
+          let m: RegExpExecArray | null;
+          while ((m = tjRe.exec(block[0])) !== null) {
+            if (m[1] !== undefined) {
+              textParts.push(m[1].replace(/\\n/g, '\n').replace(/\\r/g, ' ').replace(/\\\\/g, '\\').replace(/\\(.)/g, '$1'));
+            } else if (m[2] !== undefined) {
+              // hex string — skip (usually font-encoded, unreadable without font map)
+            } else if (m[3] !== undefined) {
+              const inner = m[3].replace(/\(([^)\\]*(?:\\.[^)\\]*)*)\)/g, (_, s) =>
+                s.replace(/\\n/g, '\n').replace(/\\\\/g, '\\').replace(/\\(.)/g, '$1')
+              );
+              textParts.push(inner.replace(/<[^>]*>/g, '').replace(/\[\s*\]/g, ''));
+            }
+          }
+          textParts.push(' ');
+        }
+
+        const extracted = textParts.join('').replace(/\s{3,}/g, '\n\n').replace(/[^\x09\x0A\x0D\x20-\x7E -￼]/g, '').trim();
+        const content = extracted.length > 80
+          ? extracted.substring(0, 8000)
+          : '[PDF text could not be extracted — try copying and pasting the content directly]';
+
+        setPendingFile({ name: file.name, size: file.size, content });
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target?.result;
+        const raw = typeof text === 'string' ? text : '[Binary file — cannot extract text]';
+        // Strip null bytes, lone surrogates, and non-printable control chars to prevent Supabase JSON errors
+        const content = raw
+          .replace(/\0/g, '')
+          .replace(/[\uD800-\uDFFF]/g, '')
+          .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+          .substring(0, 8000);
+        setPendingFile({ name: file.name, size: file.size, content });
+      };
+      reader.readAsText(file);
+    }
   };
 
   const handleSendMessage = async (overrideText?: string) => {
@@ -326,14 +377,15 @@ export default function App() {
     if (isTyping || streamingContent || !currentUser) return;
 
     // Build display and raw content — file content is sent as raw context, display stays clean
+    const sanitize = (s: string) => s.replace(/\0/g, '').replace(/[\uD800-\uDFFF]/g, '');
     let displayContent: string;
     let rawContent: string;
     if (pendingFile && textInput) {
       displayContent = `📄 **${pendingFile.name}**\n\n${textInput}`;
-      rawContent = `[File: ${pendingFile.name}]\n\n${pendingFile.content}\n\n${textInput}`;
+      rawContent = sanitize(`[File: ${pendingFile.name}]\n\n${pendingFile.content}\n\n${textInput}`);
     } else if (pendingFile) {
       displayContent = `📄 **${pendingFile.name}** (${(pendingFile.size / 1024).toFixed(1)} KB)`;
-      rawContent = `[File: ${pendingFile.name}]\n\n${pendingFile.content}`;
+      rawContent = sanitize(`[File: ${pendingFile.name}]\n\n${pendingFile.content}`);
     } else {
       displayContent = textInput;
       rawContent = textInput;
