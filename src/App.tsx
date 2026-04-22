@@ -346,7 +346,11 @@ export default function App() {
           textParts.push(' ');
         }
 
-        const extracted = textParts.join('').replace(/\s{3,}/g, '\n\n').replace(/[^\x09\x0A\x0D\x20-\x7E -￼]/g, '').trim();
+        const extracted = textParts
+        .join('')
+        .replace(/\s{3,}/g, '\n\n')
+        .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '')
+        .trim();
         const content = extracted.length > 80
           ? extracted.substring(0, 8000)
           : '[PDF text could not be extracted — try copying and pasting the content directly]';
@@ -361,16 +365,19 @@ export default function App() {
         const raw = typeof text === 'string' ? text : '[Binary file — cannot extract text]';
         // Strip null bytes, lone surrogates, and non-printable control chars to prevent Supabase JSON errors
         const content = raw
-          .replace(/\0/g, '')
-          .replace(/[\uD800-\uDFFF]/g, '')
-          .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-          .substring(0, 8000);
-        setPendingFile({ name: file.name, size: file.size, content });
-      };
+        .replace(/\0/g, '')
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+        .substring(0, 8000);
+
+      setPendingFile({
+        name: file.name,
+        size: file.size,
+        content
+      });
       reader.readAsText(file);
     }
   };
-
+  };
   const handleSendMessage = async (overrideText?: string) => {
     const textInput = overrideText ?? input.trim();
     if (!textInput && !pendingFile) return;
