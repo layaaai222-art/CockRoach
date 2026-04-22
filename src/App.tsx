@@ -132,6 +132,7 @@ export default function App() {
   const [searchFocused, setSearchFocused] = React.useState(false);
   const [searchResults, setSearchResults] = React.useState<{ chats: any[]; messages: any[] }>({ chats: [], messages: [] });
   const [sharedChatBanner, setSharedChatBanner] = React.useState<string | null>(null);
+  const [sharedViewChatId, setSharedViewChatId] = React.useState<string | null>(null);
   const [quickMemory, setQuickMemory] = React.useState('');
   const [urlPreviews, setUrlPreviews] = React.useState<Map<string, UrlPreview>>(new Map());
   const [pendingFile, setPendingFile] = React.useState<{ name: string; size: number; content: string } | null>(null);
@@ -243,6 +244,7 @@ export default function App() {
     setActiveChatId,
     setCurrentPage,
     setSharedChatBanner,
+    setSharedViewChatId,
   });
 
   React.useEffect(() => {
@@ -406,6 +408,35 @@ export default function App() {
     let currentChatId = activeChatId;
 
     try {
+      // Fork shared chat on first reply: copy messages into a new private chat for the viewer
+      if (sharedViewChatId && currentChatId === sharedViewChatId) {
+        const { data: originalMsgs } = await supabase
+          .from('messages')
+          .select('role, content, raw_text, created_at')
+          .eq('chat_id', sharedViewChatId)
+          .order('created_at', { ascending: true });
+
+        const { data: newChat, error: forkError } = await supabase
+          .from('chats')
+          .insert({ user_id: currentUser.id, title: chatHistory.find(c => c.id === sharedViewChatId)?.title ?? 'Shared Chat (copy)' })
+          .select()
+          .single();
+
+        if (forkError) { toast.error(`Fork failed: ${forkError.message}`); throw forkError; }
+
+        if (originalMsgs?.length) {
+          await supabase.from('messages').insert(
+            originalMsgs.map(m => ({ chat_id: newChat.id, role: m.role, content: m.content, raw_text: m.raw_text }))
+          );
+        }
+
+        currentChatId = newChat.id;
+        setActiveChatId(newChat.id);
+        setSharedViewChatId(null);
+        setSharedChatBanner(null);
+        await loadChatHistory(currentUser.id);
+      }
+
       if (!currentChatId) {
         const { data: chatData, error } = await supabase.from('chats').insert({
           user_id: currentUser.id,

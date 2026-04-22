@@ -10,6 +10,7 @@ interface Args {
   setActiveChatId: (id: string) => void;
   setCurrentPage: (page: 'chat' | 'settings' | 'research' | 'memory' | 'projects') => void;
   setSharedChatBanner: (msg: string | null) => void;
+  setSharedViewChatId: (id: string | null) => void;
 }
 
 const SHARE_WINDOW_DAYS = 30;
@@ -20,6 +21,7 @@ export function useShareLink({
   setActiveChatId,
   setCurrentPage,
   setSharedChatBanner,
+  setSharedViewChatId,
 }: Args) {
   const [shareLink, setShareLink] = React.useState<string | null>(null);
 
@@ -96,7 +98,8 @@ export function useShareLink({
         setCurrentPage('chat');
         if (data.user_id !== currentUser.id) {
           const { data: owner } = await supabase.from('users').select('name').eq('id', data.user_id).single();
-          setSharedChatBanner(`Shared chat from ${owner?.name ?? 'another user'} — "${data.title}"`);
+          setSharedViewChatId(data.id);
+          setSharedChatBanner(`Viewing shared chat from ${owner?.name ?? 'another user'} — your replies will be saved in your own private copy.`);
         } else {
           setSharedChatBanner(`Share link active — this is your shared chat "${data.title}"`);
         }
