@@ -10,7 +10,23 @@
       "Bash(npm uninstall *)",
       "mcp__claude_ai_Supabase__apply_migration",
       "Skill(update-config)",
-      "Bash(git *)"
+      "Bash(npm audit *)",
+      "Bash(claude mcp *)",
+      "Bash(echo \"---grep exit: $?\")",
+      "Bash(npm list *)",
+      "mcp__supabase__list_tables",
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__apply_migration",
+      "Bash(mkdir -p /Users/abhishek/Downloads/CockRoach/public/profiles)",
+      "Bash(cp \"/Users/abhishek/Downloads/drive-download-20260421T234211Z-3-001/Angad.PNG\" /Users/abhishek/Downloads/CockRoach/public/profiles/DagnA.png)",
+      "Bash(cp \"/Users/abhishek/Downloads/drive-download-20260421T234211Z-3-001/Subi.PNG\" /Users/abhishek/Downloads/CockRoach/public/profiles/Subi.png)",
+      "Bash(cp \"/Users/abhishek/Downloads/drive-download-20260421T234211Z-3-001/ManU.PNG\" /Users/abhishek/Downloads/CockRoach/public/profiles/ManU.png)",
+      "Bash(cp \"/Users/abhishek/Downloads/drive-download-20260421T234211Z-3-001/Gill.PNG\" /Users/abhishek/Downloads/CockRoach/public/profiles/Gill.png)",
+      "mcp__supabase__list_migrations",
+      "mcp__vercel__list_teams",
+      "mcp__vercel__list_projects",
+      "mcp__vercel__get_project",
+      "mcp__vercel__list_deployments"
     ]
   }
 }

@@ -45,6 +45,11 @@ const MAX_MESSAGES = 100;
 const MAX_CHARS_PER_MESSAGE = 50_000;
 const MAX_TOTAL_CHARS = 200_000;
 
+// Ceiling on completion tokens. Prevents a runaway prompt from generating
+// unbounded output (→ unbounded Azure bill). Chat interactions rarely need
+// more than ~2K tokens; 4K is a comfortable ceiling.
+const MAX_COMPLETION_TOKENS = 4000;
+
 function validateMessages(messages) {
   if (!Array.isArray(messages)) return 'messages must be an array';
   if (messages.length === 0) return 'messages must not be empty';
@@ -106,6 +111,10 @@ export default async function handler(req, res) {
         model: AZURE_OPENAI_DEPLOYMENT || AZURE_OPENAI_MODEL,
         messages: body.messages,
         temperature: typeof body.temperature === 'number' ? body.temperature : 0.7,
+        max_tokens: Math.min(
+          typeof body.max_tokens === 'number' && body.max_tokens > 0 ? body.max_tokens : MAX_COMPLETION_TOKENS,
+          MAX_COMPLETION_TOKENS,
+        ),
         stream: true,
         stream_options: { include_usage: true },
       }),

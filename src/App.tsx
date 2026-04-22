@@ -43,6 +43,9 @@ import { detectUrls, scrapeUrl, getUrlDomain, buildUrlContext, type UrlPreview }
 import MermaidDiagram from './components/MermaidDiagram';
 
 import { supabase } from './lib/supabase';
+import { logger } from './lib/logger';
+import { useAzureChat } from './hooks/useAzureChat';
+import { useShareLink } from './hooks/useShareLink';
 import SettingsLLM from './components/SettingsLLM';
 import ProfileSelector from './components/ProfileSelector';
 import { Toaster, toast } from 'sonner';
@@ -99,12 +102,12 @@ const MD_COMPONENTS: React.ComponentProps<typeof ReactMarkdown>['components'] = 
 
 export default function App() {
   const { currentUser, setAzureConfig, setCurrentUser, kbToggles, memoryItems, setMemoryItems, systemPrompt, setSystemPrompt } = useAppStore();
+  const { sessionTokens, streamResponse, isStreaming, cancel: cancelStream } = useAzureChat();
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [authChecking, setAuthChecking] = React.useState(true);
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = React.useState(false);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = React.useState(false);
   const [activeMode, setActiveMode] = React.useState('GENERAL');
-  const [sessionTokens, setSessionTokens] = React.useState({ prompt: 0, completion: 0 });
   const [isModeSelectOpen, setIsModeSelectOpen] = React.useState(false);
   const [currentPage, setCurrentPage] = React.useState<'chat' | 'settings' | 'research' | 'memory' | 'projects'>('chat');
   const [isBrutalHonesty, setIsBrutalHonesty] = React.useState(false);
@@ -122,7 +125,6 @@ export default function App() {
   const [activeChatId, setActiveChatId] = React.useState<string | null>(null);
   const [renamingChatId, setRenamingChatId] = React.useState<string | null>(null);
   const [renameValue, setRenameValue] = React.useState('');
-  const [shareLink, setShareLink] = React.useState<string | null>(null);
   const [showAnalysisButton, setShowAnalysisButton] = React.useState(false);
   const [documentViewerContent, setDocumentViewerContent] = React.useState<string | null>(null);
   const [messageRatings, setMessageRatings] = React.useState<Record<string, 'up' | 'down'>>({});
@@ -161,7 +163,7 @@ export default function App() {
       const { data: userData, error: userError } = await supabase.from('users').select('*').eq('id', user.id).single();
       
       if (userError && userError.code !== 'PGRST116') {
-         console.error('User Fetch Error:', userError);
+         logger.error('User fetch failed', { supabaseError: userError });
          toast.error(`Database Error: ${userError.message}`);
       }
       
@@ -195,7 +197,7 @@ export default function App() {
       await loadSystemPrompt(user.id);
       await loadMemoryItems(user.id);
     } catch (e: any) {
-      console.error('Error syncing user:', e);
+      logger.error('User sync failed', { error: e?.message ?? String(e) });
       toast.error(`Critical Sync Error: ${e.message}`);
     } finally {
       setAuthChecking(false);
@@ -235,77 +237,13 @@ export default function App() {
     toast.success('Conversation deleted.');
   };
 
-  const handleShareChat = async () => {
-    if (!activeChatId) return;
-    const nowIso = new Date().toISOString();
-    const expiryIso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
-    // Reuse existing token only if still active (not expired, not revoked)
-    const { data: existing } = await supabase
-      .from('chats')
-      .select('share_token, share_expires_at, share_revoked_at')
-      .eq('id', activeChatId)
-      .single();
-
-    let token: string;
-    const isActive = existing?.share_token
-      && !existing.share_revoked_at
-      && (!existing.share_expires_at || existing.share_expires_at > nowIso);
-
-    if (isActive && existing?.share_token) {
-      token = existing.share_token;
-    } else {
-      token = crypto.randomUUID();
-      await supabase.from('chats').update({
-        share_token: token,
-        share_expires_at: expiryIso,
-        share_revoked_at: null,
-      }).eq('id', activeChatId);
-    }
-
-    const link = `${window.location.origin}${window.location.pathname}?shared=${token}`;
-    setShareLink(link);
-    navigator.clipboard.writeText(link);
-    toast.success('Share link copied — valid for 30 days.');
-  };
-
-  const handleRevokeShareLink = async () => {
-    if (!activeChatId) return;
-    await supabase.from('chats').update({ share_revoked_at: new Date().toISOString() }).eq('id', activeChatId);
-    setShareLink(null);
-    toast.success('Share link revoked.');
-  };
-
-  // On mount, check for ?shared= param — load that chat in read/write view with banner
-  React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const sharedToken = params.get('shared');
-    if (sharedToken && currentUser) {
-      const nowIso = new Date().toISOString();
-      supabase
-        .from('chats')
-        .select('id, title, user_id, share_expires_at, share_revoked_at')
-        .eq('share_token', sharedToken)
-        .is('share_revoked_at', null)
-        .or(`share_expires_at.is.null,share_expires_at.gt.${nowIso}`)
-        .single()
-        .then(async ({ data }) => {
-          if (data) {
-            window.history.replaceState({}, '', window.location.pathname);
-            setActiveChatId(data.id);
-            setCurrentPage('chat');
-            if (data.user_id !== currentUser.id) {
-              const { data: owner } = await supabase.from('users').select('name').eq('id', data.user_id).single();
-              setSharedChatBanner(`Shared chat from ${owner?.name || 'another user'} — "${data.title}"`);
-            } else {
-              setSharedChatBanner(`Share link active — this is your shared chat "${data.title}"`);
-            }
-          } else {
-            toast.error('Share link expired, revoked, or invalid.');
-          }
-        });
-    }
-  }, [currentUser?.id]);
+  const { shareLink, setShareLink, createOrGetLink: handleShareChat, revokeLink: handleRevokeShareLink } = useShareLink({
+    currentUser,
+    activeChatId,
+    setActiveChatId,
+    setCurrentPage,
+    setSharedChatBanner,
+  });
 
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -320,49 +258,11 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  const streamAzureResponse = async (
-    apiMessages: { role: string; content: string }[],
-    onChunk: (text: string) => void
-  ): Promise<string> => {
-    const resp = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: apiMessages, temperature: 0.7 }),
-    });
-
-    if (!resp.ok) {
-      let message = resp.statusText;
-      try { const err = await resp.json(); message = err?.error ?? message; } catch { /* non-json */ }
-      throw new Error(`Chat API error: ${message}`);
-    }
-
-    const reader = resp.body!.getReader();
-    const decoder = new TextDecoder();
-    let full = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value, { stream: true });
-      for (const line of chunk.split('\n')) {
-        if (!line.startsWith('data: ')) continue;
-        const raw = line.slice(6).trim();
-        if (raw === '[DONE]') continue;
-        try {
-          const parsed = JSON.parse(raw);
-          const delta = parsed.choices?.[0]?.delta?.content || '';
-          if (delta) { full += delta; onChunk(full); }
-          if (parsed.usage) {
-            setSessionTokens(prev => ({
-              prompt: prev.prompt + (parsed.usage.prompt_tokens || 0),
-              completion: prev.completion + (parsed.usage.completion_tokens || 0),
-            }));
-          }
-        } catch { /* skip malformed chunk */ }
-      }
-    }
-    return full;
-  };
+  const streamAzureResponse = React.useCallback(
+    (apiMessages: { role: string; content: string }[], onChunk: (text: string) => void) =>
+      streamResponse({ messages: apiMessages, temperature: 0.7, onChunk }),
+    [streamResponse],
+  );
 
   const loadChatHistory = async (userId: string) => {
     const { data: chats, error } = await supabase.from('chats').select('*').eq('user_id', userId).order('updated_at', { ascending: false });
@@ -558,7 +458,7 @@ export default function App() {
       }
 
     } catch (error: any) {
-      console.error(error);
+      logger.error('Chat stream failed', { error: (error as Error)?.message });
       setIsTyping(false);
       setStreamingContent('');
       const errorMsg = `🪲 Lost signal. We've survived worse. (${error.message})`;
@@ -1377,14 +1277,27 @@ export default function App() {
                        </div>
                     </div>
                     <div className="flex items-center gap-3">
-                       <span className="text-[11px] font-mono font-medium text-muted-foreground px-2">Return ↵</span>
-                       <button
-                         onClick={() => handleSendMessage()}
-                         disabled={!input.trim() || isTyping}
-                         className="bg-primary disabled:opacity-50 hover:brightness-[1.15] text-background p-2 rounded-xl transition-all active:scale-90 shadow-[0_0_15px_rgba(var(--primary),0.4)] disabled:shadow-none"
-                       >
-                        <ChevronRight size={18} strokeWidth={3} />
-                       </button>
+                       {isStreaming ? (
+                         <button
+                           onClick={cancelStream}
+                           className="bg-destructive hover:brightness-[1.15] text-destructive-foreground px-3 py-2 rounded-xl transition-all active:scale-90 text-[11px] font-bold uppercase tracking-widest flex items-center gap-1.5"
+                           title="Stop generation (saves tokens)"
+                         >
+                           <X size={14} strokeWidth={3} />
+                           Stop
+                         </button>
+                       ) : (
+                         <>
+                           <span className="text-[11px] font-mono font-medium text-muted-foreground px-2">Return ↵</span>
+                           <button
+                             onClick={() => handleSendMessage()}
+                             disabled={!input.trim() || isTyping}
+                             className="bg-primary disabled:opacity-50 hover:brightness-[1.15] text-background p-2 rounded-xl transition-all active:scale-90 shadow-[0_0_15px_rgba(var(--primary),0.4)] disabled:shadow-none"
+                           >
+                             <ChevronRight size={18} strokeWidth={3} />
+                           </button>
+                         </>
+                       )}
                     </div>
                   </div>
                 </div>

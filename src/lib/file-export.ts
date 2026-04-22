@@ -246,8 +246,8 @@ export function downloadXLSX(content: string, filename = 'export') {
 export function downloadCSV(content: string, filename = 'export') {
   const blocks = parseMarkdownBlocks(content);
   const tables = blocks.filter(b => b.type === 'table');
-  let csv = '';
 
+  let csv: string;
   if (tables.length > 0) {
     const t = tables[0];
     const rows = [t.headers || [], ...(t.rows || [])];

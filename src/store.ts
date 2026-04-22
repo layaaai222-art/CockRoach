@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { KBToggles, MemoryItem, DEFAULT_KB_TOGGLES } from './lib/system-prompt-builder';
+import type { KBToggles, MemoryItem } from './lib/system-prompt-builder';
+import { DEFAULT_KB_TOGGLES } from './lib/system-prompt-builder';
 
 export type UserProfile = {
   id: string;
@@ -17,21 +18,28 @@ export type PricingRates = {
   lastFetched?: string;
 };
 
+export type AzureConfigView = {
+  apiKey: string;    // always '' — credentials live server-side
+  endpoint: string;
+  deployment: string;
+  model: string;
+  version: string;
+};
+
 type AppState = {
+  // Session / UI state (persisted)
   currentUser: UserProfile | null;
   profiles: UserProfile[];
-  azureConfig: {
-    apiKey: string;
-    endpoint: string;
-    deployment: string;
-    model: string;
-    version: string;
-  };
+  pricingRates: PricingRates;
+
+  // DB-backed state (NOT persisted — authoritative copy lives in Supabase,
+  // these fields are just an in-memory mirror hydrated on user sync).
+  azureConfig: AzureConfigView;
   kbToggles: KBToggles;
   memoryItems: MemoryItem[];
   systemPrompt: string;
-  pricingRates: PricingRates;
-  setAzureConfig: (config: any) => void;
+
+  setAzureConfig: (config: Partial<AzureConfigView>) => void;
   setCurrentUser: (user: UserProfile | null) => void;
   updateCurrentUser: (userData: Partial<UserProfile>) => void;
   addProfile: (profile: UserProfile) => void;
@@ -41,7 +49,7 @@ type AppState = {
   setPricingRates: (rates: Partial<PricingRates>) => void;
 };
 
-const INITIAL_PROFILES: UserProfile[] = [
+export const INITIAL_PROFILES: UserProfile[] = [
   {
     id: '11111111-1111-1111-1111-111111111111',
     name: 'DagnA',
@@ -72,10 +80,7 @@ const INITIAL_PROFILES: UserProfile[] = [
   },
 ];
 
-// Display-only defaults. The real Azure credentials live in server env vars
-// (AZURE_OPENAI_*) and are used only by the /api/chat proxy; the client never
-// sees the key.
-const DEFAULT_AZURE_CONFIG = {
+const DEFAULT_AZURE_CONFIG: AzureConfigView = {
   apiKey: '',
   endpoint: '',
   deployment: '',
@@ -94,61 +99,67 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       currentUser: null,
       profiles: INITIAL_PROFILES,
+      pricingRates: DEFAULT_PRICING,
       azureConfig: DEFAULT_AZURE_CONFIG,
       kbToggles: DEFAULT_KB_TOGGLES,
       memoryItems: [],
       systemPrompt: '',
-      pricingRates: DEFAULT_PRICING,
       setAzureConfig: (config) => set((state) => ({ azureConfig: { ...state.azureConfig, ...config } })),
       setCurrentUser: (user) => set({ currentUser: user }),
       updateCurrentUser: (userData) => set((state) => ({
         currentUser: state.currentUser ? { ...state.currentUser, ...userData } : null,
-        profiles: state.profiles.map(p => p.id === state.currentUser?.id ? { ...p, ...userData } : p)
+        profiles: state.profiles.map(p => p.id === state.currentUser?.id ? { ...p, ...userData } : p),
       })),
-      addProfile: (profile) => set((state) => ({
-        profiles: [...state.profiles, profile]
-      })),
-      setKBToggles: (toggles) => set((state) => ({
-        kbToggles: { ...state.kbToggles, ...toggles }
-      })),
+      addProfile: (profile) => set((state) => ({ profiles: [...state.profiles, profile] })),
+      setKBToggles: (toggles) => set((state) => ({ kbToggles: { ...state.kbToggles, ...toggles } })),
       setMemoryItems: (items) => set({ memoryItems: items }),
       setSystemPrompt: (prompt) => set({ systemPrompt: prompt }),
-      setPricingRates: (rates) => set((state) => ({
-        pricingRates: { ...state.pricingRates, ...rates }
-      })),
+      setPricingRates: (rates) => set((state) => ({ pricingRates: { ...state.pricingRates, ...rates } })),
     }),
     {
       name: 'cockroach-storage',
-      version: 6,
-      migrate: (persistedState: any, version: number) => {
+      version: 7,
+      // Only persist session/UI fields to localStorage. DB-backed fields
+      // (azureConfig, kbToggles, memoryItems, systemPrompt) re-hydrate from
+      // Supabase on user sync — Supabase is the source of truth.
+      partialize: (state) => ({
+        currentUser: state.currentUser,
+        profiles: state.profiles,
+        pricingRates: state.pricingRates,
+      }),
+      migrate: (persistedState: unknown, version: number) => {
+        const state = (persistedState ?? {}) as Partial<AppState>;
         if (version < 4) {
           return {
             currentUser: null,
             profiles: INITIAL_PROFILES,
-            azureConfig: DEFAULT_AZURE_CONFIG,
-            kbToggles: DEFAULT_KB_TOGGLES,
-            memoryItems: [],
-            systemPrompt: '',
             pricingRates: DEFAULT_PRICING,
-          };
+          } as Partial<AppState>;
         }
+        let next = state;
         if (version < 5) {
-          persistedState = { ...persistedState, pricingRates: DEFAULT_PRICING };
+          next = { ...next, pricingRates: DEFAULT_PRICING };
         }
-        // v5 → v6: sync the 4 default profiles (DagnA/Subi/ManU/Gill) into
-        // persisted state. Refreshes avatar/name/email on existing defaults,
-        // appends missing ones. User-created profiles (non-default ids) are
-        // preserved untouched. Idempotent.
         if (version < 6) {
-          const existing: UserProfile[] = persistedState.profiles ?? [];
+          const existing: UserProfile[] = next.profiles ?? [];
           const defaultsById = new Map(INITIAL_PROFILES.map(p => [p.id, p]));
           const merged = existing.map(p => defaultsById.has(p.id) ? { ...p, ...defaultsById.get(p.id)! } : p);
           const existingIds = new Set(existing.map(p => p.id));
           const appended = INITIAL_PROFILES.filter(p => !existingIds.has(p.id));
-          persistedState = { ...persistedState, profiles: [...merged, ...appended] };
+          next = { ...next, profiles: [...merged, ...appended] };
         }
-        return persistedState;
-      }
-    }
-  )
+        // v6 → v7: strip DB-backed fields from persisted state if they exist
+        // (they're no longer persisted; they hydrate from Supabase).
+        if (version < 7) {
+          const {
+            azureConfig: _a, kbToggles: _k, memoryItems: _m, systemPrompt: _s,
+            ...rest
+          } = next as Record<string, unknown>;
+          void _a; void _k; void _m; void _s;
+          next = rest as Partial<AppState>;
+        }
+        return next as AppState;
+      },
+    },
+  ),
 );

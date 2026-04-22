@@ -7,6 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import scrapeHandler from "./api/scrape.js";
+import chatHandler from "./api/chat.js";
 
 dotenv.config();
 
@@ -23,8 +24,9 @@ async function startServer() {
     res.json({ status: "ok", name: "Cockroach API" });
   });
 
-  // Delegate to the same handler Vercel runs in prod
+  // Delegate to the same handlers Vercel runs in prod — dev parity
   app.all("/api/scrape", (req, res) => scrapeHandler(req as never, res as never));
+  app.all("/api/chat", (req, res) => chatHandler(req as never, res as never));
 
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

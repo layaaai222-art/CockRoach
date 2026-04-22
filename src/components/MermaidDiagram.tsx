@@ -1,5 +1,6 @@
 import React from 'react';
 import mermaid from 'mermaid';
+import DOMPurify from 'dompurify';
 import { Code2, Image, ZoomIn, ZoomOut, RotateCcw, Download } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -25,10 +26,16 @@ function ensureInit() {
       nodeTextColor: '#dddddd',
       fontFamily: 'Calibri, system-ui, sans-serif',
     },
-    flowchart: { curve: 'basis', htmlLabels: true },
-    securityLevel: 'loose',
+    flowchart: { curve: 'basis', htmlLabels: false },
+    securityLevel: 'strict',
   });
 }
+
+const SVG_SANITIZE_CONFIG = {
+  USE_PROFILES: { svg: true, svgFilters: true },
+  FORBID_TAGS: ['script', 'foreignObject'],
+  FORBID_ATTR: ['onload', 'onerror', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
+};
 
 let _idCounter = 0;
 
@@ -52,7 +59,10 @@ export default function MermaidDiagram({ code }: Props) {
     setSvg('');
 
     mermaid.render(id, code.trim()).then(({ svg: rendered }) => {
-      if (!cancelled) { setSvg(rendered); setRendering(false); }
+      if (cancelled) return;
+      const sanitized = DOMPurify.sanitize(rendered, SVG_SANITIZE_CONFIG);
+      setSvg(sanitized);
+      setRendering(false);
     }).catch((e: Error) => {
       if (!cancelled) { setError(e.message || 'Render failed'); setRendering(false); }
     });
