@@ -225,10 +225,10 @@ export default function SettingsLLM({ sessionTokens }: { sessionTokens?: { promp
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="max-w-4xl mx-auto space-y-8 pb-20 px-4 sm:px-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
       {/* Tab Navigation */}
-      <div className="flex items-center gap-1 border-b border-border">
+      <div className="flex items-center gap-1 border-b border-border overflow-x-auto scrollbar-none">
         {SETTINGS_TABS.map((tab) => (
           <button
             key={tab.id}
@@ -260,8 +260,8 @@ export default function SettingsLLM({ sessionTokens }: { sessionTokens?: { promp
           </p>
         </div>
 
-        <div className="layaa-card bg-card/50 backdrop-blur-sm shadow-xl ring-1 ring-primary/5 p-8">
-          <div className="flex flex-col md:flex-row gap-8">
+        <div className="layaa-card bg-card/50 backdrop-blur-sm shadow-xl ring-1 ring-primary/5 p-4 sm:p-8">
+          <div className="flex flex-col md:flex-row gap-6 sm:gap-8">
             <div className="flex flex-col items-center gap-4">
                <div 
                  className="w-24 h-24 rounded-2xl bg-surface-mid border border-border flex items-center justify-center text-muted-foreground relative group overflow-hidden shadow-sm cursor-pointer"
@@ -340,7 +340,7 @@ export default function SettingsLLM({ sessionTokens }: { sessionTokens?: { promp
       </div>}
 
       {/* ── Personalization (only in Identity tab) ── */}
-      {activeTab === 'identity' && <div className="layaa-card bg-card/50 backdrop-blur-sm shadow-xl ring-1 ring-primary/5 p-8 space-y-8">
+      {activeTab === 'identity' && <div className="layaa-card bg-card/50 backdrop-blur-sm shadow-xl ring-1 ring-primary/5 p-4 sm:p-8 space-y-8">
         <div>
           <h3 className="text-lg font-bold text-foreground">Personalization</h3>
           <div className="h-px bg-border mt-3 mb-6" />
@@ -348,13 +348,13 @@ export default function SettingsLLM({ sessionTokens }: { sessionTokens?: { promp
 
         {/* Response Style */}
         <div className="space-y-5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[13px] font-semibold text-foreground">Base style and tone</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">Sets how CockRoach responds to you. Doesn't impact capabilities.</p>
             </div>
             <select value={personalization.tone} onChange={e => setPersonalization(p => ({ ...p, tone: e.target.value }))}
-              className="bg-background border border-border rounded-lg px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 min-w-[140px]">
+              className="bg-background border border-border rounded-lg px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 w-full sm:w-auto sm:min-w-35">
               {['Professional', 'Direct', 'Casual', 'Socratic', 'Mentoring', 'Blunt / No-fluff'].map(t => <option key={t}>{t}</option>)}
             </select>
           </div>
@@ -370,10 +370,10 @@ export default function SettingsLLM({ sessionTokens }: { sessionTokens?: { promp
             { label: 'Emoji', key: 'emoji', options: ['Default', 'Never', 'Occasional', 'Liberal'] },
             { label: 'Communication Style', key: 'communication_style', options: ['Direct', 'Narrative', 'Bullet-first', 'Socratic'] },
           ].map(({ label, key, options }) => (
-            <div key={key} className="flex items-center justify-between">
+            <div key={key} className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-[13px] text-foreground">{label}</p>
               <select value={(personalization as any)[key]} onChange={e => setPersonalization(p => ({ ...p, [key]: e.target.value }))}
-                className="bg-background border border-border rounded-lg px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 min-w-[140px]">
+                className="bg-background border border-border rounded-lg px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 w-full sm:w-auto sm:min-w-35">
                 {options.map(o => <option key={o}>{o}</option>)}
               </select>
             </div>
@@ -476,8 +476,8 @@ export default function SettingsLLM({ sessionTokens }: { sessionTokens?: { promp
             exit={{ opacity: 0, scale: 0.98, y: 10 }}
             className="layaa-card bg-card/50 backdrop-blur-sm overflow-hidden shadow-xl ring-1 ring-primary/5"
           >
-            <div className="p-8 space-y-8">
-              <div className="flex items-center justify-between border-b border-border pb-6">
+            <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4 sm:pb-6">
                 <div className="space-y-1">
                   <h3 className="text-lg font-bold text-foreground">Configure {activeProvider.toUpperCase()}</h3>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Strategic Identity & Key Exchange</p>

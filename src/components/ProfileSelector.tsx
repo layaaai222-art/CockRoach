@@ -117,16 +117,16 @@ export default function ProfileSelector({ onSelect }: { onSelect: () => void }) 
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#0c0c0c] flex flex-col items-center justify-center p-8 dark selection:bg-primary/20">
+    <div className="min-h-screen w-full bg-[#0c0c0c] flex flex-col items-center justify-center p-4 sm:p-8 dark selection:bg-primary/20">
 
       {/* Brand */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="text-center mb-12 space-y-2"
+        className="text-center mb-8 sm:mb-12 space-y-2"
       >
-        <h1 className="text-5xl font-black text-foreground tracking-tight">
+        <h1 className="text-4xl sm:text-5xl font-black text-foreground tracking-tight">
           Cock<span className="text-primary">Roach</span>
         </h1>
         <p className="text-muted-foreground text-[14px] font-medium italic max-w-sm text-center">
@@ -139,7 +139,7 @@ export default function ProfileSelector({ onSelect }: { onSelect: () => void }) 
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.1 }}
-        className="flex flex-wrap items-center justify-center gap-8"
+        className="flex flex-wrap items-center justify-center gap-5 sm:gap-8"
       >
         {profilesLoading && profiles.length === 0 && (
           [1, 2, 3, 4].map(n => (
@@ -161,7 +161,7 @@ export default function ProfileSelector({ onSelect }: { onSelect: () => void }) 
             className="flex flex-col items-center gap-3 group"
           >
             <div className={cn(
-              "w-[130px] h-[130px] rounded-[22px] overflow-hidden border-2 transition-all duration-200 relative",
+              "w-25 h-25 sm:w-32.5 sm:h-32.5 rounded-[18px] sm:rounded-[22px] overflow-hidden border-2 transition-all duration-200 relative",
               hoveredId === profile.id
                 ? "border-primary scale-105 shadow-[0_0_30px_rgba(var(--primary),0.25)]"
                 : "border-white/10 scale-100"
@@ -207,7 +207,7 @@ export default function ProfileSelector({ onSelect }: { onSelect: () => void }) 
           className="flex flex-col items-center gap-3 group"
         >
           <div className={cn(
-            "w-[130px] h-[130px] rounded-[22px] border-2 border-dashed flex items-center justify-center transition-all duration-200",
+            "w-25 h-25 sm:w-32.5 sm:h-32.5 rounded-[18px] sm:rounded-[22px] border-2 border-dashed flex items-center justify-center transition-all duration-200",
             hoveredId === '__add'
               ? "border-primary/60 bg-primary/5 scale-105"
               : "border-white/10 bg-white/[0.02] scale-100"
@@ -252,7 +252,7 @@ export default function ProfileSelector({ onSelect }: { onSelect: () => void }) 
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed z-50 bg-[#141414] border border-white/10 rounded-2xl shadow-2xl p-8 w-full max-w-sm mx-4"
+              className="fixed z-50 bg-[#141414] border border-white/10 rounded-2xl shadow-2xl p-5 sm:p-8 w-full max-w-sm mx-4"
             >
               <div className="flex items-center justify-between mb-6">
                 <div>
@@ -322,7 +322,7 @@ export default function ProfileSelector({ onSelect }: { onSelect: () => void }) 
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed z-50 bg-[#141414] border border-white/10 rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4"
+              className="fixed z-50 bg-[#141414] border border-white/10 rounded-2xl shadow-2xl p-5 sm:p-8 w-full max-w-md mx-4"
             >
               <div className="flex items-center justify-between mb-6">
                 <div>

@@ -214,7 +214,7 @@ export default function SettingsAgentBrain() {
   const promptTokenEstimate = Math.round(assembledPreview.length / 4);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-10 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="max-w-4xl mx-auto space-y-10 pb-20 px-4 sm:px-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
       {/* System Prompt */}
       <div className="space-y-6">
@@ -232,13 +232,11 @@ export default function SettingsAgentBrain() {
             className="w-full h-80 bg-background border border-border rounded-xl p-4 text-[13px] text-foreground font-mono focus:outline-none focus:border-primary/50 transition-all resize-none layaa-scroll leading-relaxed"
             placeholder="Enter system prompt..."
           />
-          <div className="flex items-center justify-between pt-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-muted-foreground font-mono">
-                {localPrompt.length.toLocaleString()} chars
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2">
+            <span className="text-[10px] text-muted-foreground font-mono">
+              {localPrompt.length.toLocaleString()} chars
+            </span>
+            <div className="flex items-center gap-3 flex-wrap">
               <button
                 onClick={handleResetToDefault}
                 className="flex items-center gap-2 px-4 py-2 text-[11px] font-bold text-muted-foreground hover:text-foreground border border-border hover:border-primary/30 rounded-lg transition-all uppercase tracking-widest"
@@ -298,7 +296,7 @@ export default function SettingsAgentBrain() {
           ))}
         </div>
 
-        <div className="bg-background border border-border rounded-xl px-5 py-3 flex items-center justify-between">
+        <div className="bg-background border border-border rounded-xl px-4 sm:px-5 py-3 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-[11px] text-muted-foreground font-mono">
             KBs enabled: {KB_META.filter(kb => kbToggles[kb.key]).length}/4 · KB content: ~{Math.round(enabledKBsSize / 4).toLocaleString()} tokens
           </span>
@@ -310,7 +308,7 @@ export default function SettingsAgentBrain() {
 
       {/* Memory */}
       <div className="space-y-6">
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1.5">
             <h2 className="text-2xl font-bold text-foreground tracking-tight">Strategic Memory</h2>
             <p className="text-muted-foreground text-[13px] leading-relaxed max-w-2xl">

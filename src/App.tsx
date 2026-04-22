@@ -34,6 +34,7 @@ import {
   RefreshCw,
   FileDown,
   Globe,
+  Menu,
 } from 'lucide-react';
 import DocumentViewer from './components/DocumentViewer';
 import { motion, AnimatePresence } from 'motion/react';
@@ -133,6 +134,8 @@ export default function App() {
   const [searchResults, setSearchResults] = React.useState<{ chats: any[]; messages: any[] }>({ chats: [], messages: [] });
   const [sharedChatBanner, setSharedChatBanner] = React.useState<string | null>(null);
   const [sharedViewChatId, setSharedViewChatId] = React.useState<string | null>(null);
+  const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 768);
+  const [isSearchOpen, setIsSearchOpen] = React.useState(false);
   const [quickMemory, setQuickMemory] = React.useState('');
   const [urlPreviews, setUrlPreviews] = React.useState<Map<string, UrlPreview>>(new Map());
   const [pendingFile, setPendingFile] = React.useState<{ name: string; size: number; content: string } | null>(null);
@@ -251,14 +254,26 @@ export default function App() {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        searchRef.current?.focus();
-        setSearchFocused(true);
+        if (isMobile) { setIsSearchOpen(true); } else { searchRef.current?.focus(); setSearchFocused(true); }
       }
-      if (e.key === 'Escape') { setSearchFocused(false); setSearchQuery(''); }
+      if (e.key === 'Escape') { setSearchFocused(false); setSearchQuery(''); setIsSearchOpen(false); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
+  }, [isMobile]);
+
+  React.useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
   }, []);
+
+  React.useEffect(() => {
+    if (isMobile) {
+      setIsLeftSidebarCollapsed(true);
+      setIsRightSidebarCollapsed(true);
+    }
+  }, [isMobile]);
 
   const streamAzureResponse = React.useCallback(
     (apiMessages: { role: string; content: string }[], onChunk: (text: string) => void) =>
@@ -693,14 +708,35 @@ export default function App() {
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden selection:bg-primary/20 selection:text-primary dark">
       <Toaster position="top-right" theme="dark" richColors />
-      
-      {/* Sidebar - Layaa OS Style */}
-      <motion.aside 
+
+      {/* Mobile backdrop — left sidebar */}
+      <AnimatePresence>
+        {isMobile && !isLeftSidebarCollapsed && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-59 bg-black/60 backdrop-blur-sm"
+            onClick={() => setIsLeftSidebarCollapsed(true)} />
+        )}
+      </AnimatePresence>
+
+      {/* Mobile backdrop — right sidebar */}
+      <AnimatePresence>
+        {isMobile && !isRightSidebarCollapsed && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-59 bg-black/60 backdrop-blur-sm"
+            onClick={() => setIsRightSidebarCollapsed(true)} />
+        )}
+      </AnimatePresence>
+
+      {/* Left Sidebar */}
+      <motion.aside
         initial={false}
-        animate={{ width: isLeftSidebarCollapsed ? 0 : 256 }}
+        animate={isMobile ? { x: isLeftSidebarCollapsed ? -280 : 0 } : { width: isLeftSidebarCollapsed ? 0 : 256 }}
+        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
         className={cn(
-          "h-full bg-sidebar border-r border-border flex flex-col transition-all overflow-hidden relative shadow-sm z-30",
-          isLeftSidebarCollapsed && "border-none"
+          "bg-sidebar border-r border-border flex flex-col overflow-hidden shadow-sm",
+          isMobile
+            ? "fixed inset-y-0 left-0 w-70 z-60"
+            : cn("h-full relative z-30 transition-all", isLeftSidebarCollapsed && "border-none")
         )}
       >
         {/* Sidebar Header — brand */}
@@ -838,133 +874,212 @@ export default function App() {
       {/* Main Content Area — split when document viewer is open */}
       <main className="flex-1 flex relative bg-background overflow-hidden">
       {/* Chat column */}
-      <div className={cn("flex flex-col flex-1 min-w-0 transition-all duration-300", documentViewerContent ? "max-w-[55%]" : "w-full")}>
-        {/* Header - Layaa OS Style */}
-        <header className="h-14 border-b border-border flex items-center justify-between px-6 bg-background/80 backdrop-blur-md sticky top-0 z-40 relative">
-           <div className="flex items-center gap-4 w-1/3">
-              <AnimatePresence>
-                {isLeftSidebarCollapsed && (
-                  <motion.button 
-                    initial={{ scale: 0.8, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.8, opacity: 0 }}
-                    onClick={() => setIsLeftSidebarCollapsed(false)}
-                    className="p-2 bg-card border border-border rounded-lg text-muted-foreground hover:text-foreground transition-all shadow-sm"
-                  >
-                    <PanelLeftClose size={18} className="rotate-180" />
-                  </motion.button>
-                )}
-              </AnimatePresence>
-           </div>
-           
-           <div className="flex-1 flex justify-center w-1/3">
-              <div className="relative w-full max-w-sm" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) { setSearchFocused(false); } }}>
-                 <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-10" />
-                 <input
-                   ref={searchRef}
-                   type="text"
-                   value={searchQuery}
-                   onChange={e => setSearchQuery(e.target.value)}
-                   onFocus={() => setSearchFocused(true)}
-                   placeholder="Search chats, messages..."
-                   className="w-full bg-surface-mid border border-border rounded-xl pl-9 pr-10 py-1.5 h-9 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/40 focus:bg-card transition-all"
-                 />
-                 {!searchQuery && (
-                   <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground/60 font-mono bg-background border border-border px-1.5 py-0.5 rounded">⌘K</kbd>
-                 )}
-                 {searchQuery && (
-                   <button onClick={() => { setSearchQuery(''); setSearchFocused(false); }} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground">
-                     <X size={12} />
-                   </button>
-                 )}
-                 {/* Search results dropdown */}
-                 <AnimatePresence>
-                   {searchFocused && searchQuery.length >= 2 && (searchResults.chats.length > 0 || searchResults.messages.length > 0) && (
-                     <motion.div
-                       initial={{ opacity: 0, y: -6, scale: 0.98 }}
-                       animate={{ opacity: 1, y: 0, scale: 1 }}
-                       exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                       className="absolute top-full mt-2 left-0 right-0 bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden max-h-[420px] overflow-y-auto layaa-scroll"
-                     >
-                       {searchResults.chats.length > 0 && (
-                         <div>
-                           <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-4 pt-3 pb-1.5">Chats</p>
-                           {searchResults.chats.map(chat => (
-                             <button key={chat.id} onMouseDown={() => handleSearchSelect(chat.id)}
-                               className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors text-left">
-                               <div className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
-                               <span className="text-[13px] text-foreground truncate">{chat.title}</span>
-                             </button>
-                           ))}
-                         </div>
-                       )}
-                       {searchResults.messages.length > 0 && (
-                         <div className="border-t border-white/5">
-                           <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-4 pt-3 pb-1.5">Messages</p>
-                           {searchResults.messages.map(msg => (
-                             <button key={msg.id} onMouseDown={() => handleSearchSelect(msg.chat_id)}
-                               className="w-full flex flex-col gap-0.5 px-4 py-2.5 hover:bg-white/5 transition-colors text-left">
-                               <span className="text-[10px] font-bold text-primary uppercase tracking-wide">{msg.chatTitle}</span>
-                               <span className="text-[12px] text-muted-foreground truncate">{msg.content.slice(0, 80)}</span>
-                             </button>
-                           ))}
-                         </div>
-                       )}
-                     </motion.div>
-                   )}
-                   {searchFocused && searchQuery.length >= 2 && searchResults.chats.length === 0 && searchResults.messages.length === 0 && (
-                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                       className="absolute top-full mt-2 left-0 right-0 bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl z-50 px-4 py-6 text-center">
-                       <p className="text-[12px] text-muted-foreground">No results for "<span className="text-foreground">{searchQuery}</span>"</p>
-                     </motion.div>
-                   )}
-                 </AnimatePresence>
-              </div>
-           </div>
-           
-           <div className="flex items-center justify-end gap-3 w-1/3">
-              {/* Download Chat — only when a chat is active */}
-              {activeChatId && currentPage === 'chat' && messages.length > 0 && (
-                <>
-                  <button
-                    onClick={handleShareChat}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-mid border border-border rounded-full text-[10px] font-bold text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all uppercase tracking-widest"
-                  >
-                    <Share2 size={12} />
-                    <span>Share</span>
-                  </button>
-                  <button
-                    onClick={handleDownloadChat}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-mid border border-border rounded-full text-[10px] font-bold text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all uppercase tracking-widest"
-                  >
-                    <FileDown size={12} />
-                    <span>Download</span>
-                  </button>
-                </>
-              )}
-
-              <div className="flex items-center gap-2 px-3 py-1 bg-surface-mid border border-border rounded-full hover:border-primary-border/40 transition-all cursor-pointer group" onClick={() => setIsBrutalHonesty(!isBrutalHonesty)}>
-                 <div className={cn("w-2 h-2 rounded-full transition-all", isBrutalHonesty ? "bg-primary animate-pulse shadow-[0_0_8px_rgba(92,5,5,0.8)]" : "bg-muted-foreground/30")} />
-                 <span className={cn("text-[10px] font-bold uppercase tracking-widest", isBrutalHonesty ? "text-primary" : "text-muted-foreground")}>Brutal Honesty</span>
-                 <span className="text-[9px] text-muted-foreground/50 font-mono ml-1">{isBrutalHonesty ? 'ON' : 'OFF'}</span>
-              </div>
-
-              {isRightSidebarCollapsed && (
-                <button
-                  onClick={() => setIsRightSidebarCollapsed(false)}
-                  className="p-2 text-muted-foreground hover:text-foreground hover:bg-card rounded-lg transition-all"
+      <div className={cn("flex flex-col flex-1 min-w-0 transition-all duration-300", documentViewerContent ? (isMobile ? "hidden" : "max-w-[55%]") : "w-full")}>
+        {/* Header */}
+        <header className="h-14 border-b border-border flex items-center justify-between px-3 md:px-6 bg-background/80 backdrop-blur-md sticky top-0 z-40">
+          {/* Left — hamburger (mobile) or expand-sidebar (desktop) */}
+          <div className="flex items-center gap-2 md:w-1/3">
+            <button
+              className="md:hidden p-2 bg-card border border-border rounded-lg text-muted-foreground hover:text-foreground transition-all shadow-sm"
+              onClick={() => setIsLeftSidebarCollapsed(false)}
+            >
+              <Menu size={18} />
+            </button>
+            <h2 className="md:hidden text-[17px] font-black tracking-tight leading-none">
+              Cock<span className="text-primary">Roach</span>
+            </h2>
+            <AnimatePresence>
+              {isLeftSidebarCollapsed && (
+                <motion.button
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  onClick={() => setIsLeftSidebarCollapsed(false)}
+                  className="hidden md:flex p-2 bg-card border border-border rounded-lg text-muted-foreground hover:text-foreground transition-all shadow-sm"
                 >
-                  <PanelRightClose size={18} className="rotate-180" />
+                  <PanelLeftClose size={18} className="rotate-180" />
+                </motion.button>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Center — search bar (desktop only) */}
+          <div className="hidden md:flex flex-1 justify-center md:w-1/3">
+            <div className="relative w-full max-w-sm" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) { setSearchFocused(false); } }}>
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-10" />
+              <input
+                ref={searchRef}
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                placeholder="Search chats, messages..."
+                className="w-full bg-surface-mid border border-border rounded-xl pl-9 pr-10 py-1.5 h-9 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/40 focus:bg-card transition-all"
+              />
+              {!searchQuery && (
+                <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground/60 font-mono bg-background border border-border px-1.5 py-0.5 rounded">⌘K</kbd>
+              )}
+              {searchQuery && (
+                <button onClick={() => { setSearchQuery(''); setSearchFocused(false); }} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground">
+                  <X size={12} />
                 </button>
               )}
-           </div>
+              <AnimatePresence>
+                {searchFocused && searchQuery.length >= 2 && (searchResults.chats.length > 0 || searchResults.messages.length > 0) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                    className="absolute top-full mt-2 left-0 right-0 bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden max-h-105 overflow-y-auto layaa-scroll"
+                  >
+                    {searchResults.chats.length > 0 && (
+                      <div>
+                        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-4 pt-3 pb-1.5">Chats</p>
+                        {searchResults.chats.map(chat => (
+                          <button key={chat.id} onMouseDown={() => handleSearchSelect(chat.id)}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors text-left">
+                            <div className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
+                            <span className="text-[13px] text-foreground truncate">{chat.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults.messages.length > 0 && (
+                      <div className="border-t border-white/5">
+                        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-4 pt-3 pb-1.5">Messages</p>
+                        {searchResults.messages.map(msg => (
+                          <button key={msg.id} onMouseDown={() => handleSearchSelect(msg.chat_id)}
+                            className="w-full flex flex-col gap-0.5 px-4 py-2.5 hover:bg-white/5 transition-colors text-left">
+                            <span className="text-[10px] font-bold text-primary uppercase tracking-wide">{msg.chatTitle}</span>
+                            <span className="text-[12px] text-muted-foreground truncate">{msg.content.slice(0, 80)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+                {searchFocused && searchQuery.length >= 2 && searchResults.chats.length === 0 && searchResults.messages.length === 0 && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="absolute top-full mt-2 left-0 right-0 bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl z-50 px-4 py-6 text-center">
+                    <p className="text-[12px] text-muted-foreground">No results for "<span className="text-foreground">{searchQuery}</span>"</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* Right — actions */}
+          <div className="flex items-center gap-1.5 md:gap-3 md:w-1/3 justify-end">
+            {/* Mobile: search icon */}
+            <button className="md:hidden p-2 text-muted-foreground hover:text-foreground transition-all" onClick={() => setIsSearchOpen(true)}>
+              <Search size={18} />
+            </button>
+            {/* Desktop: Share + Download */}
+            {activeChatId && currentPage === 'chat' && messages.length > 0 && (
+              <div className="hidden md:flex items-center gap-3">
+                <button onClick={handleShareChat} className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-mid border border-border rounded-full text-[10px] font-bold text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all uppercase tracking-widest">
+                  <Share2 size={12} /><span>Share</span>
+                </button>
+                <button onClick={handleDownloadChat} className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-mid border border-border rounded-full text-[10px] font-bold text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all uppercase tracking-widest">
+                  <FileDown size={12} /><span>Download</span>
+                </button>
+              </div>
+            )}
+            {/* Mobile: Share icon only */}
+            {activeChatId && currentPage === 'chat' && messages.length > 0 && (
+              <button onClick={handleShareChat} className="md:hidden p-2 text-muted-foreground hover:text-foreground transition-all">
+                <Share2 size={18} />
+              </button>
+            )}
+            {/* Brutal honesty toggle */}
+            <div className="flex items-center gap-1.5 px-2 md:px-3 py-1 bg-surface-mid border border-border rounded-full hover:border-primary-border/40 transition-all cursor-pointer" onClick={() => setIsBrutalHonesty(!isBrutalHonesty)}>
+              <div className={cn("w-2 h-2 rounded-full transition-all shrink-0", isBrutalHonesty ? "bg-primary animate-pulse shadow-[0_0_8px_rgba(92,5,5,0.8)]" : "bg-muted-foreground/30")} />
+              <span className={cn("hidden sm:inline text-[10px] font-bold uppercase tracking-widest", isBrutalHonesty ? "text-primary" : "text-muted-foreground")}>Brutal</span>
+              <span className={cn("hidden sm:inline text-[9px] font-mono", isBrutalHonesty ? "text-primary/70" : "text-muted-foreground/50")}>{isBrutalHonesty ? 'ON' : 'OFF'}</span>
+            </div>
+            {/* Mobile: memory/right sidebar button */}
+            <button className="md:hidden p-2 text-muted-foreground hover:text-foreground transition-all" onClick={() => setIsRightSidebarCollapsed(false)}>
+              <Brain size={18} />
+            </button>
+            {/* Desktop: right sidebar expand */}
+            {isRightSidebarCollapsed && (
+              <button onClick={() => setIsRightSidebarCollapsed(false)} className="hidden md:flex p-2 text-muted-foreground hover:text-foreground hover:bg-card rounded-lg transition-all">
+                <PanelRightClose size={18} className="rotate-180" />
+              </button>
+            )}
+          </div>
         </header>
+
+        {/* Mobile full-screen search overlay */}
+        <AnimatePresence>
+          {isSearchOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-70 bg-background/98 backdrop-blur-xl flex flex-col md:hidden"
+            >
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
+                <Search size={16} className="text-muted-foreground shrink-0" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={searchQuery}
+                  onChange={e => { setSearchQuery(e.target.value); setSearchFocused(true); }}
+                  placeholder="Search chats, messages..."
+                  className="flex-1 bg-transparent text-[15px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+                />
+                <button onClick={() => { setIsSearchOpen(false); setSearchQuery(''); setSearchFocused(false); }}
+                  className="p-2 text-muted-foreground hover:text-foreground">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto layaa-scroll">
+                {searchQuery.length >= 2 && (searchResults.chats.length > 0 || searchResults.messages.length > 0) ? (
+                  <>
+                    {searchResults.chats.length > 0 && (
+                      <div>
+                        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-4 pt-4 pb-2">Chats</p>
+                        {searchResults.chats.map(chat => (
+                          <button key={chat.id} onClick={() => { handleSearchSelect(chat.id); setIsSearchOpen(false); }}
+                            className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-white/5 transition-colors text-left border-b border-border/30">
+                            <div className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
+                            <span className="text-[14px] text-foreground">{chat.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults.messages.length > 0 && (
+                      <div>
+                        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-4 pt-4 pb-2">Messages</p>
+                        {searchResults.messages.map(msg => (
+                          <button key={msg.id} onClick={() => { handleSearchSelect(msg.chat_id); setIsSearchOpen(false); }}
+                            className="w-full flex flex-col gap-1 px-4 py-3.5 hover:bg-white/5 transition-colors text-left border-b border-border/30">
+                            <span className="text-[10px] font-bold text-primary uppercase tracking-wide">{msg.chatTitle}</span>
+                            <span className="text-[13px] text-muted-foreground">{msg.content.slice(0, 80)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-48 gap-2">
+                    <Search size={28} className="text-muted-foreground/20" />
+                    <p className="text-[13px] text-muted-foreground">
+                      {searchQuery.length >= 2 ? `No results for "${searchQuery}"` : 'Type to search…'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Shared chat received banner */}
         <AnimatePresence>
           {sharedChatBanner && (
             <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-              className="mx-6 mt-3 flex items-center gap-3 bg-blue-950/40 border border-blue-500/20 rounded-xl px-4 py-2.5">
+              className="mx-3 md:mx-6 mt-3 flex items-center gap-3 bg-blue-950/40 border border-blue-500/20 rounded-xl px-3 md:px-4 py-2.5">
               <Users size={13} className="text-blue-400 shrink-0" />
               <p className="text-[12px] text-blue-300 flex-1 truncate">{sharedChatBanner}</p>
               <button onClick={() => setSharedChatBanner(null)} className="p-1 text-blue-400/60 hover:text-blue-300"><X size={12} /></button>
@@ -979,7 +1094,7 @@ export default function App() {
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              className="mx-6 mt-3 flex items-center gap-3 bg-primary-bg border border-primary/20 rounded-xl px-4 py-3"
+              className="mx-3 md:mx-6 mt-3 flex items-center gap-3 bg-primary-bg border border-primary/20 rounded-xl px-3 md:px-4 py-3"
             >
               <Link size={14} className="text-primary shrink-0" />
               <p className="text-[12px] text-muted-foreground flex-1 font-mono truncate">{shareLink}</p>
@@ -1005,7 +1120,7 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        <div className="flex-1 overflow-y-auto layaa-scroll pb-32" ref={chatScrollRef}>
+        <div className="flex-1 overflow-y-auto layaa-scroll pb-28 sm:pb-32" ref={chatScrollRef}>
           {currentPage === 'settings' ? (
             <SettingsLLM sessionTokens={sessionTokens} />
           ) : currentPage === 'research' ? (
@@ -1035,7 +1150,7 @@ export default function App() {
           ) : (
             <div className="flex flex-col min-h-full">
               {messages.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center py-20 px-8">
+                <div className="flex-1 flex flex-col items-center justify-center py-10 sm:py-20 px-4 sm:px-8">
                   {/* Center Welcome */}
                   <div className="text-center space-y-10 animate-in fade-in slide-in-from-bottom-5 duration-700 w-full max-w-3xl mx-auto">
                     <div className="relative inline-block">
@@ -1080,12 +1195,12 @@ export default function App() {
                       {msg.role === 'assistant' ? (
                         /* ── ASSISTANT: left-aligned ── */
                         <div
-                          className="flex items-start gap-3 py-1 pl-4 pr-8 group/msg"
+                          className="flex items-start gap-2 sm:gap-3 py-1 pl-2 pr-2 sm:pl-4 sm:pr-8 group/msg"
                         >
                           <div className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center bg-background border border-border overflow-hidden mt-1">
                             <Bot size={13} className="text-primary" />
                           </div>
-                          <div className="flex flex-col min-w-0 flex-1 max-w-[82%]">
+                          <div className="flex flex-col min-w-0 flex-1 max-w-[96%] sm:max-w-[82%]">
                             {summaryMeta.has(msg.id ?? '') && (
                               <div className="flex items-center gap-1.5 mb-1.5 pl-1">
                                 <span className="text-[9px] font-bold text-primary/70 uppercase tracking-widest px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-full">Document Summary</span>
@@ -1144,11 +1259,11 @@ export default function App() {
                       ) : (
                         /* ── USER: right-aligned ── */
                         <div
-                          className="flex items-start gap-3 justify-end py-1 pr-4 pl-8 group/msg"
+                          className="flex items-start gap-2 sm:gap-3 justify-end py-1 pr-2 pl-2 sm:pr-4 sm:pl-8 group/msg"
                           onMouseEnter={() => {}}
                           onMouseLeave={() => {}}
                         >
-                          <div className="flex flex-col items-end min-w-0 max-w-[75%]">
+                          <div className="flex flex-col items-end min-w-0 max-w-[88%] sm:max-w-[75%]">
                             <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
                               className="bg-surface-mid border border-border/40 rounded-2xl rounded-tr-sm px-4 py-3 text-[14px] text-foreground leading-relaxed">
                               <p className="whitespace-pre-wrap break-words">{msg.content}</p>
@@ -1172,11 +1287,11 @@ export default function App() {
 
                   {/* Streaming bubble */}
                   {streamingContent && (
-                    <div className="flex items-start gap-3 px-4 py-1">
+                    <div className="flex items-start gap-2 sm:gap-3 px-2 sm:px-4 py-1">
                       <div className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center bg-background border border-border mt-1">
                         <Bot size={13} className="text-primary" />
                       </div>
-                      <div className="flex-1 max-w-[82%] bg-card border border-primary/10 rounded-2xl rounded-tl-sm px-4 py-3 min-w-0">
+                      <div className="flex-1 max-w-[96%] sm:max-w-[82%] bg-card border border-primary/10 rounded-2xl rounded-tl-sm px-3 sm:px-4 py-3 min-w-0">
                         <div className="prose-cockroach">
                           <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
                             {streamingContent}
@@ -1189,7 +1304,7 @@ export default function App() {
 
                   {/* Typing dots — waiting for first chunk */}
                   {isTyping && !streamingContent && (
-                    <div className="flex items-start gap-3 px-4 py-1">
+                    <div className="flex items-start gap-2 sm:gap-3 px-2 sm:px-4 py-1">
                       <div className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center bg-background border border-border mt-1">
                         <Bot size={13} className="text-primary animate-pulse" />
                       </div>
@@ -1209,7 +1324,7 @@ export default function App() {
 
         {/* Message Input - Bottom Panel */}
         {currentPage === 'chat' && (
-          <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-background via-background to-transparent pt-12 z-20">
+          <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-6 bg-linear-to-t from-background via-background to-transparent pt-8 sm:pt-12 z-20">
              {isModeSelectOpen && (
                <div className="fixed inset-0 z-40" onClick={() => setIsModeSelectOpen(false)} />
              )}
@@ -1288,10 +1403,10 @@ export default function App() {
                         handleSendMessage();
                       }
                     }}
-                    className="w-full bg-transparent border-none p-5 text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0 resize-none min-h-[64px] max-h-[200px] layaa-scroll rounded-t-[28px]"
+                    className="w-full bg-transparent border-none p-3 sm:p-5 text-[14px] sm:text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0 resize-none min-h-14 sm:min-h-16 max-h-40 sm:max-h-50 layaa-scroll rounded-t-[28px]"
                     rows={1}
                   />
-                  <div className="flex items-center justify-between px-5 py-3 bg-surface-mid/40 rounded-b-[28px] border-t border-white/5 backdrop-blur-md">
+                  <div className="flex items-center justify-between px-3 sm:px-5 py-2 sm:py-3 bg-surface-mid/40 rounded-b-[28px] border-t border-white/5 backdrop-blur-md">
                     <div className="flex items-center gap-3">
                        <input 
                          type="file" 
@@ -1346,7 +1461,7 @@ export default function App() {
                          </button>
                        ) : (
                          <>
-                           <span className="text-[11px] font-mono font-medium text-muted-foreground px-2">Return ↵</span>
+                           <span className="hidden sm:inline text-[11px] font-mono font-medium text-muted-foreground px-2">Return ↵</span>
                            <button
                              onClick={() => handleSendMessage()}
                              disabled={(!input.trim() && !pendingFile) || isTyping}
@@ -1369,7 +1484,7 @@ export default function App() {
         {documentViewerContent && (
           <motion.div
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: '45%', opacity: 1 }}
+            animate={{ width: isMobile ? '100%' : '45%', opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ type: 'spring', damping: 30, stiffness: 280 }}
             className="h-full overflow-hidden shrink-0"
@@ -1384,8 +1499,14 @@ export default function App() {
       {/* Right Sidebar - Memory Context Panel */}
       <motion.aside
         initial={false}
-        animate={{ width: isRightSidebarCollapsed ? 0 : 280 }}
-        className={cn("h-full bg-sidebar border-l border-border flex flex-col transition-all overflow-hidden relative shadow-sm z-30", isRightSidebarCollapsed && "border-none")}
+        animate={isMobile ? { x: isRightSidebarCollapsed ? 280 : 0 } : { width: isRightSidebarCollapsed ? 0 : 280 }}
+        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+        className={cn(
+          "bg-sidebar border-l border-border flex flex-col overflow-hidden shadow-sm",
+          isMobile
+            ? "fixed inset-y-0 right-0 w-70 z-60"
+            : cn("h-full relative z-30 transition-all", isRightSidebarCollapsed && "border-none")
+        )}
       >
         <div className="h-14 flex items-center justify-between px-4 border-b border-border bg-sidebar/50 shrink-0">
           <div className="flex items-center gap-2">
@@ -1463,9 +1584,9 @@ export default function App() {
         </div>
       </motion.aside>
 
-      {/* Floating Reveal for Hidden Right Sidebar */}
+      {/* Floating Reveal for Hidden Right Sidebar — desktop only */}
       <AnimatePresence>
-        {isRightSidebarCollapsed && (
+        {isRightSidebarCollapsed && !isMobile && (
           <motion.button 
             initial={{ x: 20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
