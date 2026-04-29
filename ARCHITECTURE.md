@@ -388,9 +388,60 @@ All tables in the `public` schema, RLS intentionally disabled
   `communication_style`
 - `updated_at`
 
-### `projects` and `research_reports`
-Exist in the live DB (RLS enabled, 0 rows) but are not used by the current
-UI. Captured in `schema.sql` with a "verify before relying" note.
+### `projects` (extended on Day 2 of launch sprint)
+- `id` uuid PK, `user_id` text, `name` text, `description` text
+- `tags` text[], `status` text, `config` jsonb
+- `stage` text default 'idea' — `idea | validated | building | launched | scaling | paused | archived`
+- `chosen_idea_id` uuid (nullable; FK target arrives with the `ideas` table)
+- `health_score` jsonb default `{}` — composite metrics over time
+- `founder_fit_alignment` jsonb default `{}` — per-axis fit
+- `last_pulse_at` timestamptz — when last weekly pulse summary ran
+- `created_at`, `updated_at`
+
+### `decisions`
+Append-only structured decision log per project. Captures Bezos
+Type-1/Type-2 reversibility framework as a first-class data primitive.
+- `id` uuid PK, `project_id` FK, `user_id` FK
+- `category` (pricing / gtm / hiring / fundraise / pivot / legal / product / ops / positioning / validation / other)
+- `question`, `decision`, `rationale`
+- `confidence` (low / medium / high), `reversibility` (reversible / expensive / one_way)
+- `reversibility_decay_at` — past this, the decision is harder to undo
+- `pre_mortem` — captured at decision time
+- `depends_on_decision_id` self-FK — decision dependency graph
+- `tags` text[]
+- `decided_at`, `revisit_at`, `outcome_observed` (post-revisit reflection)
+- `reversed_at`, `reversed_by_decision_id` self-FK — full reversal trail
+- Indexes: project_id, revisit-due partial, decay-due partial, dependency lookup, category
+
+### `project_artifacts`
+Versioned export catalog (decks, models, memos) per project.
+- `id` uuid PK, `project_id` FK
+- `kind` (pitch_deck / financial_model / positioning_doc / business_plan / gtm_plan / investor_update / legal_doc / survey_results / idea_validation / memo / one_pager / other)
+- `title`, `content` jsonb, `version` int default 1
+- `parent_artifact_id` self-FK — version lineage
+- `exported_format` (pdf / docx / xlsx / pptx / csv / md / txt or null)
+- `notes`, `created_at`, `updated_at`
+- `updated_at` auto-updated by `set_updated_at_now()` trigger
+- Indexes: project_id, kind, lineage
+
+### `project_pulse_log`
+Auto-generated weekly project summaries — founder-focused equivalent
+of Claude Projects' 24-hour memory synthesis, but persisted and
+audit-able.
+- `id` uuid PK, `project_id` FK
+- `week_starting` date (Monday of the week)
+- `summary_md` markdown body
+- `metrics` jsonb (token usage, decisions made, modes used)
+- `key_decisions` uuid[] — decision IDs from this week
+- `notable_artifacts` uuid[] — artifact IDs created/updated
+- `health_delta` jsonb — how the project's health_score moved
+- `auto_generated_at`
+- Unique index: `(project_id, week_starting)` — one row per project per week
+
+### `research_reports`
+Legacy table from an earlier feature. RLS enabled, 0 rows. Not used by
+current UI. Captured in `schema.sql` with a "verify before relying"
+note.
 
 ### FK cascades
 All `user_id` FKs have `ON DELETE CASCADE ON UPDATE CASCADE`, so
@@ -464,6 +515,24 @@ Manages share-token creation, resolution, and revocation.
 - Internal effect — on mount, if `?shared=<token>` is in the URL,
   resolves it against Supabase and navigates to the chat (with banner
   showing owner name)
+
+### `useProjects`
+Project CRUD scoped to the current user. Sub-resources (decisions,
+artifacts, pulse_log) live in their own hooks.
+
+- `projects: Project[]` — current user's projects, ordered by recency
+- `loading`, `error` — fetch state
+- `refresh()` — re-pull from Supabase
+- `create(input: NewProject)` — insert with safe defaults; returns the row
+- `update(id, patch)` — partial update; touches `updated_at`
+- `archive(id)` — soft-delete via `stage = 'archived'`
+- `remove(id)` — hard delete (cascades to decisions, artifacts, pulse_log)
+- `byId(id)` — memoised lookup helper
+
+Type definitions for `Project`, `Decision`, `ProjectArtifact`,
+`ProjectPulseLog` plus enum metadata (`PROJECT_STAGES`,
+`DECISION_CATEGORIES`, `REVERSIBILITY_LEVELS`, `ARTIFACT_KINDS`) live in
+`src/lib/types.ts`.
 
 ---
 

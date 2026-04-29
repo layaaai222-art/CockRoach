@@ -181,20 +181,26 @@ the product + a "Start free" CTA into the app.
 
 **Build status:** ✓ typecheck clean · ✓ lint 0 errors (43 warnings, all `any` types, non-blocking)
 **Deployed prod:** `cock-roach.vercel.app` (auto-deploys from `main`)
-**Local + origin/main:** aligned at `dbaf983` (chore: remove legacy doc files)
-**Recent commits today (2026-06-29):**
-- `dbaf983` — chore: remove legacy doc files (COCKROACH_AGENT_SYSTEM_PROMPT, COCKROACH_MASTER_PROMPT, metadata.json, supabase_schema.sql)
-- `2f48765` — docs: add canonical product doc + live project context (documentation.md + claude.md)
-- `6b2c654` — (other contributor) Make entire app fully responsive for mobile
+**Local + origin/main:** aligned at `aad125e` (docs: align documentation/architecture/claude.md for Layaa AI launch)
+**Canonical remote:** `origin` → `https://github.com/layaaai222-art/CockRoach.git` (Layaa AI's repo)
+**Backup remote:** `4asaan` → `https://github.com/4asaanAI/CockRoach.git` (preserved)
 
 **Phase 0 (git divergence) → ✅ DONE.**
-**Phase 1 Day 1 → IN PROGRESS** (legacy deletes ✓; documentation.md and ARCHITECTURE.md updates ✓; claude.md log entry ⏳).
+**Phase 1 Day 1 → ✅ DONE** (legacy deletes; documentation.md + ARCHITECTURE.md updates).
+**Phase 1 Day 2 (Project spine — data layer) → IN PROGRESS** as of 2026-04-30.
 
-**Backup branch:** `backup-c6a8a8f` (local, holds our pre-merge commit; can delete once we're confident).
+**Day 2 progress (today, 2026-04-30):**
+- ✅ Supabase MCP reconfigured to hosted HTTP + OAuth (project-scope `.mcp.json`).
+- ✅ Migration `project_spine_full_schema` applied — extended `projects` (stage, chosen_idea_id, description, health_score, founder_fit_alignment, last_pulse_at) + new `decisions` / `project_artifacts` / `project_pulse_log` tables + nullable `project_id` FK on `chats` and `memory_items` + 9 indexes + unique pulse-per-week constraint + `updated_at` trigger.
+- ✅ RLS disabled on the 4 project-spine tables for consistency with the no-auth model; `grant all` to anon+authenticated.
+- ⏳ Local file work remaining → schema.sql / policies.sql updated · types.ts created · useProjects hook created · supabase.ts supports new publishable-key var name · `.env` + `.env.example` updated · docs being updated now.
+
+**Backup branch:** `backup-c6a8a8f` (local, pre-merge commit; safe to delete).
 
 **Open notes:**
 - 1Password SSH-signing still failing on commits; using `commit.gpgsign=false` per-commit. Re-sign later when 1Password agent is reachable.
-- Azure key revoked; the dead string remains in pre-`dbaf983` git history. GitHub secret-scan alert can be closed as "Revoked" anytime.
+- Azure key was rotated 2026-04-30; new key in `.env` and Vercel.
+- Supabase auth now via OAuth (hosted MCP at `https://mcp.supabase.com/mcp`); no PAT in chat history.
 
 ---
 
@@ -303,6 +309,65 @@ launch, freeze all non-essential testing and shift to mock-mode for QA.
   whenever Abhi wants.
 - Next: complete Day 1 by committing the doc updates, then start
   Day 2 (Project spine — data layer migrations).
+
+### 2026-04-30 — Phase 1 Day 2: Project spine (data layer)
+- **Strategy lock-in.** Researched ChatGPT Projects, Claude Projects, and
+  Bezos's Type-1/Type-2 doors framework. Both competitors offer
+  sandboxed memory + file uploads; neither has structured decision logs,
+  reversibility classification, or weekly pulse summaries. CockRoach's
+  2x lever is the persistent venture-context layer with:
+  - Decision log with reversibility (`reversible | expensive | one_way`)
+    + `reversibility_decay_at` (decisions become harder to reverse over
+    time; surface this).
+  - Decision dependency graph via `depends_on_decision_id`.
+  - Decision reversal trail via `reversed_at` + `reversed_by_decision_id`.
+  - `pre_mortem` field captured at decision time.
+  - Weekly auto-generated `project_pulse_log` summarising the project's
+    state — Claude's 24h synthesis, but founder-focused + persisted.
+  - Versioned `project_artifacts` with `parent_artifact_id` lineage
+    (ChatGPT/Claude can't show diff between Pitch Deck v2 and v3; we
+    will).
+  - Project `health_score` + `founder_fit_alignment` JSONB fields for
+    composite metrics over time.
+- **Supabase MCP swap.** Moved from npx stdio (PAT-based) to hosted
+  HTTP MCP at `https://mcp.supabase.com/mcp` with OAuth flow. Cleaner
+  auth model — no PAT in chat history, no rotation needed for the MCP.
+  `.mcp.json` at project scope so future sessions inherit the setup.
+- **Migration `project_spine_full_schema` applied.** Extended `projects`
+  with 6 new columns + stage check constraint; created `decisions`
+  (16 cols + 5 indexes + 3 check constraints), `project_artifacts`
+  (versioning + 3 indexes + 3 check constraints), `project_pulse_log`
+  (1 unique index for project+week dedup); added nullable `project_id`
+  FK on `chats` and `memory_items`; created `set_updated_at_now()`
+  trigger function and bound it to `project_artifacts`.
+- **Read flag finding.** New tables defaulted to RLS-on (Supabase
+  default). Disabled RLS on the 4 spine tables to match the rest of
+  the no-auth-phase schema; `grant all` to anon + authenticated.
+- **Local file work shipped:**
+  - `supabase/schema.sql` — full idempotent schema with all spine
+    tables and indexes.
+  - `supabase/policies.sql` — grants + RLS-disable for the 4 new
+    tables.
+  - `src/lib/types.ts` — TypeScript types for Project, Decision,
+    ProjectArtifact, ProjectPulseLog plus enum metadata
+    (PROJECT_STAGES, DECISION_CATEGORIES, REVERSIBILITY_LEVELS,
+    ARTIFACT_KINDS).
+  - `src/hooks/useProjects.ts` — fetch/create/update/archive/remove
+    + memoised `byId`.
+  - `src/lib/supabase.ts` — supports both `VITE_SUPABASE_PUBLISHABLE_KEY`
+    (preferred) and `VITE_SUPABASE_ANON_KEY` (legacy fallback).
+  - `.env` updated with the new publishable key alongside the legacy
+    JWT (gitignored).
+  - `.env.example` updated to show new var as preferred.
+- **Verified:** `npm run typecheck` passes; build pipeline clean.
+- **Next:** Day 3 (Project spine — UI).
+  - `/projects` list page + project detail page (4 tabs: Chats /
+    Decisions / Artifacts / Reminders).
+  - "Start project from this chat" action.
+  - Project switcher in chat header.
+  - Project-aware system prompt (latest 10 decisions + project
+    description injected when active).
+  - Mode reorder + Discovery submenu.
 
 ---
 

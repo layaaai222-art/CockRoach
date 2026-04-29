@@ -641,17 +641,18 @@ the **source of truth**; local browser state is a minimal cache.
 | `azure_configs` | Display-only Azure settings per user (key is server-side) |
 | `system_prompts` | User's prompt + KB toggles |
 | `user_personalization` | Tone / style / nickname / interests / etc. |
-| `chats` | Conversation records (with share_token, expiry, revoke fields) |
+| `chats` | Conversation records (share_token, expiry, revoke + nullable `project_id` FK) |
 | `messages` | Chat messages (role, content, raw_text) |
-| `memory_items` | Persistent agent memory per user |
+| `memory_items` | Persistent agent memory per user (with nullable `project_id` FK for project-scoped memory) |
+| `projects` | One row per venture — extended with `stage`, `chosen_idea_id`, `description`, `health_score`, `founder_fit_alignment`, `last_pulse_at` (Day 2 of launch sprint) |
+| `decisions` | Append-only structured decision log per project. Captures Bezos Type-1/Type-2 reversibility, decision dependency graph (`depends_on_decision_id`), pre-mortem at decision time, revisit timer + outcome reflection, and reversal trail (`reversed_at` + `reversed_by_decision_id`). |
+| `project_artifacts` | Versioned export catalog (decks, models, memos) per project with `parent_artifact_id` lineage — diff between v2 and v3 of the same artifact stays traceable. |
+| `project_pulse_log` | Auto-generated weekly project summaries (founder-focused equivalent of Claude's 24-hour memory synthesis, but persisted and audit-able). Uniqueness: one row per `(project_id, week_starting)`. |
 
-### 🚧 Tables (planned for Project spine)
+### 🚧 Tables (planned)
 
 | Table | Purpose |
 |---|---|
-| `projects` | One row per venture (already in DB, currently unused) |
-| `decisions` | Append-only decision log per project |
-| `project_artifacts` | Saved exports (decks, models, memos) per project |
 | `ideas` | Browsable catalog of generated/validated ideas (lite version) |
 
 See ARCHITECTURE.md §8 for full DDL of current tables. Planned tables
@@ -722,26 +723,41 @@ breaks earlier phases.
 - Strict TypeScript, ESLint, CI (typecheck + lint + audit)
 - Comprehensive documentation (README, SECURITY, ARCHITECTURE, this)
 
-### 🚧 Phase 1 — Project spine (next)
+### Phase 1 — Project spine (in progress)
 
 The architectural pivot from "AI chat with modes" to "AI co-pilot with
 persistent venture memory."
 
-- Wire up `projects` table (already in DB, unused)
-- New `decisions` table — append-only log
-- New `project_artifacts` table
-- Project list UI page (currentPage='projects')
+**Day 2 (data layer) ✅ shipped 2026-04-30:**
+- `projects` table extended with stage / chosen_idea_id / description /
+  health_score / founder_fit_alignment / last_pulse_at
+- `decisions` table created (16 columns including reversibility +
+  decay timer + dependency graph + pre-mortem + reversal trail)
+- `project_artifacts` table created (versioned with parent_artifact_id
+  lineage)
+- `project_pulse_log` table created (auto-generated weekly summaries,
+  unique per project per week)
+- Nullable `project_id` FK on `chats` and `memory_items`
+- 9 indexes (project_id lookups, revisit-due partial, decay-due partial,
+  decision dependency lookup, artifact lineage, etc.)
+- `set_updated_at_now()` trigger function bound to `project_artifacts`
+- TypeScript types in `src/lib/types.ts`
+- `useProjects` hook in `src/hooks/useProjects.ts` (fetch / create /
+  update / archive / remove / byId)
+- Supabase JS client supports new `VITE_SUPABASE_PUBLISHABLE_KEY`
+  alongside legacy `VITE_SUPABASE_ANON_KEY`
+
+**Day 3 (UI) 🚧 next:**
+- Project list UI page (`currentPage='projects'`)
 - Project detail page with tabs: chats / decisions / artifacts /
   reminders
 - "Start project from this chat" action
+- Project switcher dropdown in chat header
 - Project-scoped chat filtering
 - Project-aware system prompt (latest 10 decisions + project description
   injected)
 - Mode reorder in UI: post-idea modes promoted, discovery modes moved
   to a Discovery submenu
-
-**Estimated effort:** ~10–12 hours. **Highest leverage** of any planned
-work.
 
 ### 🚧 Phase 2 — Operator modes
 
