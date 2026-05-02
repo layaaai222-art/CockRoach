@@ -9,9 +9,11 @@ import { toast } from 'sonner';
 interface DocumentViewerProps {
   content: string;
   onClose: () => void;
+  /** Called after a successful export so callers can prompt "save as artifact" etc. */
+  onExported?: (info: { ext: string; label: string; content: string }) => void;
 }
 
-export default function DocumentViewer({ content, onClose }: DocumentViewerProps) {
+export default function DocumentViewer({ content, onClose, onExported }: DocumentViewerProps) {
   const [exporting, setExporting] = React.useState<string | null>(null);
   const [showFormats, setShowFormats] = React.useState(false);
   const filename = `cockroach-${new Date().toISOString().slice(0, 10)}`;
@@ -22,6 +24,7 @@ export default function DocumentViewer({ content, onClose }: DocumentViewerProps
     try {
       await (fmt.fn as any)(content, filename);
       toast.success(`Downloaded as .${fmt.ext}`);
+      onExported?.({ ext: fmt.ext, label: fmt.label, content });
     } catch (e: any) {
       toast.error(`Export failed: ${e.message}`);
     } finally {

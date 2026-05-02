@@ -1845,7 +1845,39 @@ export default function App() {
             transition={{ type: 'spring', damping: 30, stiffness: 280 }}
             className="h-full overflow-hidden shrink-0"
           >
-            <DocumentViewer content={documentViewerContent} onClose={() => setDocumentViewerContent(null)} />
+            <DocumentViewer
+              content={documentViewerContent}
+              onClose={() => setDocumentViewerContent(null)}
+              onExported={({ ext, label, content }) => {
+                // Save-as-artifact prompt — only when a project is active.
+                if (!activeProjectId) return;
+                const kind = (
+                  ext === 'pptx' ? 'pitch_deck' :
+                  ext === 'xlsx' ? 'financial_model' :
+                  ext === 'csv'  ? 'survey_results' :
+                  'memo'
+                );
+                const title = `${label} export · ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                toast(`Exported as .${ext}`, {
+                  duration: 6000,
+                  action: {
+                    label: 'Save to project',
+                    onClick: async () => {
+                      const { error } = await supabase.from('project_artifacts').insert({
+                        project_id: activeProjectId,
+                        kind,
+                        title,
+                        content: { markdown: content },
+                        version: 1,
+                        exported_format: ext,
+                      });
+                      if (error) toast.error(`Couldn't save: ${error.message}`);
+                      else toast.success('Saved to project artifacts');
+                    },
+                  },
+                });
+              }}
+            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -1955,16 +1987,25 @@ export default function App() {
               </div>
             ) : (
               <div className="space-y-2">
-                {memoryItems.slice(0, 20).map(item => (
-                  <div key={item.id} className="group flex items-start gap-2 p-2.5 bg-card/40 border border-border/40 rounded-xl hover:border-border transition-colors">
-                    <span className="text-[9px] font-bold text-primary/70 uppercase tracking-wider shrink-0 mt-0.5 px-1.5 py-0.5 bg-primary/10 rounded">{item.category}</span>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed flex-1 min-w-0">{item.content}</p>
-                    <button onClick={() => handleDeleteMemory(item.id)}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground/40 hover:text-destructive transition-all shrink-0">
-                      <X size={10} />
-                    </button>
-                  </div>
-                ))}
+                {memoryItems.slice(0, 20).map(item => {
+                  // Visual differentiation by memory category. founder_fit
+                  // is amber to signal "founder profile context"; general
+                  // is muted; everything else uses the primary accent.
+                  const accent =
+                    item.category === 'founder_fit' ? 'text-amber-300/90 bg-amber-500/10 border-amber-500/20' :
+                    item.category === 'general'     ? 'text-muted-foreground bg-surface-mid/60 border-border/50' :
+                                                       'text-primary/80 bg-primary/10 border-primary/20';
+                  return (
+                    <div key={item.id} className="group flex items-start gap-2 p-2.5 bg-card/40 border border-border/40 rounded-xl hover:border-border transition-colors">
+                      <span className={cn('text-[9px] font-bold uppercase tracking-wider shrink-0 mt-0.5 px-1.5 py-0.5 rounded border', accent)}>{item.category}</span>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed flex-1 min-w-0">{item.content}</p>
+                      <button onClick={() => handleDeleteMemory(item.id)}
+                        className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground/40 hover:text-destructive transition-all shrink-0">
+                        <X size={10} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
