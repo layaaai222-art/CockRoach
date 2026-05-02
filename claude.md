@@ -202,6 +202,7 @@ the product + a "Start free" CTA into the app.
 **Phase 1 Day 2 (Project spine — data layer) → ✅ DONE** 2026-04-30.
 **Phase 1 Day 3 (Project spine — UI) → ✅ DONE** 2026-04-30 (same-day; we ran ahead).
 **Phase 1 Day 4 (Operator modes) → ✅ DONE** 2026-04-30 (still running ahead).
+**Phase 1 Day 5 (Specialist modes + UI design + decision-log polish) → ✅ DONE** 2026-04-30.
 
 **Day 2 progress (today, 2026-04-30):**
 - ✅ Supabase MCP reconfigured to hosted HTTP + OAuth (project-scope `.mcp.json`).
@@ -465,7 +466,79 @@ launch, freeze all non-essential testing and shift to mock-mode for QA.
 - **Next:** Day 4 (operator modes — PRICING, GO_TO_MARKET, FUNDRAISING,
   HIRING_AND_EQUITY) + mode reorder + Discovery submenu.
 
-### 2026-04-30 — Phase 1 Day 4: Operator modes + reorder
+### 2026-04-30 — Phase 1 Day 5: Specialist modes + UI design + decision-log polish
+- **Founder ask added during Day 5:** include a UI/UX design skill so
+  users can spec the website/app interface for their idea. Synthesized
+  with planned specialist modes.
+- **Research lock-in.** Pulled current data on each topic:
+  - Customer discovery: Mom Test rules (talk life not idea, past
+    specifics not future generics, ask "what/how" not "why",
+    compliments are fake signal); JTBD timeline questions; segmentation
+    by job + pain + authority + urgency; saturation stop rule (3
+    consecutive no-news interviews).
+  - Legal & ops 2026: Delaware C-corp = VC standard; LLC-to-C-corp
+    conversion is $5K-$25K + tax pain so don't take an LLC if raising;
+    IP assignment = "single most important legal doc for tech";
+    83(b) within 30 days mandatory; FTC non-compete ruling 2024+.
+  - Pivot framework (Ries): runway redefined as "pivots remaining, not
+    months"; 11 pivot types named; sunk-cost language detector;
+    decision matrix with 7 honest signals → score → call.
+  - UI design 2026: v0 (code-first React+shadcn), Lovable (full-stack
+    with backend+DB), Figma Make / First Draft, Google Stitch 2.0.
+    **2x angle: be the strategic upstream — produce structured 5-layer
+    specs that 10x the output of these tools** rather than try to be
+    them.
+- **Shipped (single commit):**
+  - 4 new mode KBs in `kb/modes/`:
+    - `CUSTOMER_DISCOVERY.md` — Mom Test rules, banned vs approved
+      question patterns, JTBD timeline, ICP scoring, saturation stop
+      rules. Produces interview script + outreach template + synthesis
+      matrix as artifacts.
+    - `LEGAL_AND_OPS.md` — entity decision table (Delaware C-corp vs
+      LLC vs PBC), Day-0 docs checklist (founder vesting + IP
+      assignment + 83(b)), compliance flag matrix by domain (HIPAA /
+      PCI / COPPA / GDPR / CCPA / SOC 2 / AI laws / FinSvc / Crypto),
+      founder traps section. Explicit "needs a real lawyer" line.
+    - `PIVOT_OR_PERSEVERE.md` — Build-Measure-Learn framing, 5 pre-
+      questions (real data? hypothesis decomposition? cheapest test?
+      data vs feeling? pivot pre-mortem?), 11 Ries pivot types, 7-row
+      decision matrix scoring 7-35 → recommendation. Brutal honesty
+      built in.
+    - `UI_DESIGN.md` — **NEW per founder ask.** 5-layer spec
+      framework: IA tree → page-level wireframe specs → design system
+      tokens → component inventory → tool-specific paste-ready prompt
+      (v0 / Lovable / Figma Make / Stitch). Brand-kit-aware. Doesn't
+      try to draw pixels — produces specs that 10x the AI design
+      tools' output.
+  - `kb-mode-loader.ts` — 4 new ?raw imports + entries (now 17 mode
+    KBs total + Skills KB).
+  - `App.tsx` APP_MODES — added 4 modes with right groupings:
+    - `core`: PIVOT_OR_PERSEVERE (decision-making)
+    - `operator`: CUSTOMER_DISCOVERY, LEGAL_AND_OPS
+    - `creative`: UI_DESIGN (joins IMAGE_PROMPTING)
+    - Icons added: Headphones, Scale, GitBranch, LayoutDashboard.
+- **Decision-log polish (the second Day 5 deliverable):**
+  - `DecisionFormModal` accepts new optional `defaultCategory` prop;
+    pre-selects category when opened with context.
+  - `App.tsx` adds `modeToDecisionCategory(mode)` mapper that translates
+    the active working mode → the decision category that fits best
+    (PRICING → pricing, GO_TO_MARKET → gtm, FUNDRAISING → fundraise,
+    HIRING_AND_EQUITY → hiring, LEGAL_AND_OPS → legal,
+    PIVOT_OR_PERSEVERE → pivot, POSITIONING → positioning,
+    IDEA_VALIDATION/CUSTOMER_DISCOVERY → validation, BUSINESS_MODEL/
+    EXECUTION/UI_DESIGN → product, others → other).
+  - **"Log decision" button** added to chat header (desktop only,
+    visible when project is active). Click → DecisionFormModal opens
+    pre-filled with project + user + mode-mapped category. Founder can
+    capture any strategic call mid-chat without leaving the
+    conversation.
+- **Verified:** typecheck ✓, lint 0 errors (42 pre-existing warnings).
+- **Skipped (Day 6 territory):** "Save as artifact" prompt on every
+  export inside a project; revisit-due banner on app load; project
+  pulse summary auto-generation (server-side cron).
+- **Next:** Day 6 (frameworks library — Value Equation, ACP, Value
+  Matrix, Value Ladder + "Run framework" quick action on project
+  page).
 - **Research lock-in.** Pulled 2026 data on each topic to make the KBs
   decision-ready, not generic:
   - PRICING: Van Westendorp PSM still gold standard; anchor Pro tier

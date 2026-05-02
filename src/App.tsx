@@ -38,6 +38,10 @@ import {
   Target,
   PiggyBank,
   UserPlus,
+  Headphones,
+  Scale,
+  GitBranch,
+  LayoutDashboard,
 } from 'lucide-react';
 import DocumentViewer from './components/DocumentViewer';
 import { motion, AnimatePresence } from 'motion/react';
@@ -55,9 +59,31 @@ import ProfileSelector from './components/ProfileSelector';
 import ProjectsList from './components/ProjectsList';
 import ProjectDetail from './components/ProjectDetail';
 import ProjectSwitcher from './components/projects/ProjectSwitcher';
+import DecisionFormModal from './components/projects/DecisionFormModal';
 import { useProjects } from './hooks/useProjects';
 import { useDecisions } from './hooks/useDecisions';
 import { formatProjectContext } from './lib/project-context';
+import type { DecisionCategory } from './lib/types';
+
+// Map the active working mode → default decision category. Pre-fills the
+// form when the user clicks "Log decision" from the chat header.
+function modeToDecisionCategory(mode: string): DecisionCategory {
+  switch (mode) {
+    case 'PRICING':            return 'pricing';
+    case 'GO_TO_MARKET':       return 'gtm';
+    case 'FUNDRAISING':        return 'fundraise';
+    case 'HIRING_AND_EQUITY':  return 'hiring';
+    case 'LEGAL_AND_OPS':      return 'legal';
+    case 'PIVOT_OR_PERSEVERE': return 'pivot';
+    case 'POSITIONING':        return 'positioning';
+    case 'IDEA_VALIDATION':
+    case 'CUSTOMER_DISCOVERY': return 'validation';
+    case 'BUSINESS_MODEL':
+    case 'EXECUTION':          return 'product';
+    case 'UI_DESIGN':          return 'product';
+    default:                   return 'other';
+  }
+}
 import { Toaster, toast } from 'sonner';
 import { buildSystemPrompt } from './lib/system-prompt-builder';
 import { COCKROACH_DEFAULT_SYSTEM_PROMPT } from './lib/kb-constants';
@@ -77,25 +103,29 @@ interface AppMode {
 
 const APP_MODES: AppMode[] = [
   // Core — always-relevant
-  { id: 'GENERAL',           icon: Bot,         label: 'General Chat',         group: 'core' },
-  { id: 'THINKING',          icon: Brain,       label: 'Think Deeply',         group: 'core' },
-  { id: 'DEEP_RESEARCH',     icon: Search,      label: 'Research Market',      group: 'core' },
+  { id: 'GENERAL',             icon: Bot,             label: 'General Chat',         group: 'core' },
+  { id: 'THINKING',            icon: Brain,           label: 'Think Deeply',         group: 'core' },
+  { id: 'DEEP_RESEARCH',       icon: Search,          label: 'Research Market',      group: 'core' },
+  { id: 'PIVOT_OR_PERSEVERE',  icon: GitBranch,       label: 'Pivot or Persevere',   group: 'core' },
 
   // Operator — post-idea-chosen (primary lane)
-  { id: 'BUSINESS_MODEL',    icon: Briefcase,   label: 'Business Model',       group: 'operator' },
-  { id: 'POSITIONING',       icon: Rocket,      label: 'Brand & Positioning',  group: 'operator' },
-  { id: 'PRICING',           icon: Tag,         label: 'Pricing Strategy',     group: 'operator' },
-  { id: 'GO_TO_MARKET',      icon: Target,      label: 'Go-to-Market',         group: 'operator' },
-  { id: 'EXECUTION',         icon: CheckSquare, label: 'Build Plan',           group: 'operator' },
-  { id: 'FUNDRAISING',       icon: PiggyBank,   label: 'Fundraising',          group: 'operator' },
-  { id: 'HIRING_AND_EQUITY', icon: UserPlus,    label: 'Hiring & Equity',      group: 'operator' },
+  { id: 'CUSTOMER_DISCOVERY',  icon: Headphones,      label: 'Customer Discovery',   group: 'operator' },
+  { id: 'BUSINESS_MODEL',      icon: Briefcase,       label: 'Business Model',       group: 'operator' },
+  { id: 'POSITIONING',         icon: Rocket,          label: 'Brand & Positioning',  group: 'operator' },
+  { id: 'PRICING',             icon: Tag,             label: 'Pricing Strategy',     group: 'operator' },
+  { id: 'GO_TO_MARKET',        icon: Target,          label: 'Go-to-Market',         group: 'operator' },
+  { id: 'EXECUTION',           icon: CheckSquare,     label: 'Build Plan',           group: 'operator' },
+  { id: 'FUNDRAISING',         icon: PiggyBank,       label: 'Fundraising',          group: 'operator' },
+  { id: 'HIRING_AND_EQUITY',   icon: UserPlus,        label: 'Hiring & Equity',      group: 'operator' },
+  { id: 'LEGAL_AND_OPS',       icon: Scale,           label: 'Legal & Ops',          group: 'operator' },
 
   // Discovery — pre-idea (secondary lane)
-  { id: 'IDEA_GENERATION',   icon: Lightbulb,   label: 'Generate Ideas',       group: 'discovery' },
-  { id: 'IDEA_VALIDATION',   icon: ShieldCheck, label: 'Validate Idea',        group: 'discovery' },
+  { id: 'IDEA_GENERATION',     icon: Lightbulb,       label: 'Generate Ideas',       group: 'discovery' },
+  { id: 'IDEA_VALIDATION',     icon: ShieldCheck,     label: 'Validate Idea',        group: 'discovery' },
 
   // Creative — adjunct utilities
-  { id: 'IMAGE_PROMPTING',   icon: ImageIcon,   label: 'Create Visual Prompt', group: 'creative' },
+  { id: 'UI_DESIGN',           icon: LayoutDashboard, label: 'UI Design Spec',       group: 'creative' },
+  { id: 'IMAGE_PROMPTING',     icon: ImageIcon,       label: 'Create Visual Prompt', group: 'creative' },
 ];
 
 const MODE_GROUP_LABELS: Record<ModeGroup, string> = {
@@ -152,12 +182,13 @@ export default function App() {
   const [isModeSelectOpen, setIsModeSelectOpen] = React.useState(false);
   const [currentPage, setCurrentPage] = React.useState<'chat' | 'settings' | 'research' | 'memory' | 'projects'>('chat');
   const [activeProjectId, setActiveProjectId] = React.useState<string | null>(null);
+  const [logDecisionOpen, setLogDecisionOpen] = React.useState(false);
 
   // Project context for the system prompt — when activeProjectId is set, the
   // agent gets a [PROJECT CONTEXT] block listing the project description and
   // the latest 10 non-reversed decisions.
   const { byId: projectById } = useProjects({ userId: currentUser?.id ?? null });
-  const { decisions: projectDecisions } = useDecisions({ projectId: activeProjectId });
+  const { decisions: projectDecisions, log: logProjectDecision } = useDecisions({ projectId: activeProjectId });
   const activeProject = projectById(activeProjectId);
   const projectContext = React.useMemo(
     () => formatProjectContext(activeProject, projectDecisions),
@@ -763,6 +794,19 @@ export default function App() {
     <div className="flex h-screen w-full bg-background overflow-hidden selection:bg-primary/20 selection:text-primary dark">
       <Toaster position="top-right" theme="dark" richColors />
 
+      {/* Project decision-log modal — opened from chat header. Mode-aware
+          default category so e.g. PRICING mode pre-selects 'pricing'. */}
+      {activeProjectId && currentUser && (
+        <DecisionFormModal
+          open={logDecisionOpen}
+          projectId={activeProjectId}
+          userId={currentUser.id}
+          defaultCategory={modeToDecisionCategory(activeMode)}
+          onClose={() => setLogDecisionOpen(false)}
+          onLog={logProjectDecision}
+        />
+      )}
+
       {/* Mobile backdrop — left sidebar */}
       <AnimatePresence>
         {isMobile && !isLeftSidebarCollapsed && (
@@ -1061,6 +1105,17 @@ export default function App() {
             {activeChatId && currentPage === 'chat' && messages.length > 0 && (
               <button onClick={handleShareChat} className="md:hidden p-2 text-muted-foreground hover:text-foreground transition-all">
                 <Share2 size={18} />
+              </button>
+            )}
+            {/* Log decision — only visible when project is active and user is in chat */}
+            {activeProjectId && currentPage === 'chat' && currentUser && (
+              <button
+                onClick={() => setLogDecisionOpen(true)}
+                className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-surface-mid border border-border rounded-full text-[10px] font-bold text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all uppercase tracking-widest"
+                title="Capture a strategic decision in this project's log"
+              >
+                <Brain size={12} />
+                <span>Log decision</span>
               </button>
             )}
             {/* Brutal honesty toggle */}

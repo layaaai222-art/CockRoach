@@ -20,6 +20,9 @@ interface Props {
   userId: string;
   onClose: () => void;
   onLog: (input: NewDecision & { user_id: string }) => Promise<unknown>;
+  /** Pre-select a category when the modal opens. Useful for context-aware
+   *  triggers, e.g. opening from PRICING mode pre-selects 'pricing'. */
+  defaultCategory?: DecisionCategory;
 }
 
 const CONFIDENCE_LEVELS: { id: Confidence; label: string }[] = [
@@ -40,8 +43,8 @@ const REVERSIBILITY_HELP: Record<Reversibility, string> = {
   one_way:    'One-way door (Bezos type 1). Hard or impossible to undo. Slow down.',
 };
 
-export default function DecisionFormModal({ open, projectId, userId, onClose, onLog }: Props) {
-  const [category, setCategory] = React.useState<DecisionCategory>('product');
+export default function DecisionFormModal({ open, projectId, userId, onClose, onLog, defaultCategory }: Props) {
+  const [category, setCategory] = React.useState<DecisionCategory>(defaultCategory ?? 'product');
   const [question, setQuestion] = React.useState('');
   const [decision, setDecision] = React.useState('');
   const [rationale, setRationale] = React.useState('');
@@ -54,7 +57,7 @@ export default function DecisionFormModal({ open, projectId, userId, onClose, on
 
   React.useEffect(() => {
     if (open) {
-      setCategory('product');
+      setCategory(defaultCategory ?? 'product');
       setQuestion('');
       setDecision('');
       setRationale('');
@@ -64,7 +67,7 @@ export default function DecisionFormModal({ open, projectId, userId, onClose, on
       setRevisitDate('');
       setShowAdvanced(false);
     }
-  }, [open]);
+  }, [open, defaultCategory]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

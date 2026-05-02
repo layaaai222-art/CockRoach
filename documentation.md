@@ -825,12 +825,40 @@ The interactive layer on top of Phase 1's data model:
 - Revisit banners on first login each day for any decision whose
   `revisit_at` has passed
 
-### 🚧 Phase 4 — Specialist modes
+### Phase 4 — Specialist modes ✅ shipped 2026-04-30
 
-- `CUSTOMER_DISCOVERY` — Mom-test scripts, segmentation, exit criteria
-- `LEGAL_AND_OPS` — entity choice, founder agreements, IP, compliance
-- `PIVOT_OR_PERSEVERE` — pivot framework, sunk-cost detection, decision
-  rubric
+- ✅ `CUSTOMER_DISCOVERY` — Mom Test rules + banned vs approved
+  question patterns + JTBD timeline questions + ICP segmentation
+  (job × pain × authority × urgency) + saturation stop rules.
+  Produces interview script + outreach template + synthesis matrix
+  artifacts.
+- ✅ `LEGAL_AND_OPS` — entity decision table (DE C-corp vs LLC vs PBC),
+  Day-0 docs checklist (founder vesting + IP assignment + 83(b) within
+  30 days), compliance flag matrix per domain (HIPAA / PCI / COPPA /
+  GDPR / CCPA / SOC 2 / AI laws / FinSvc / Crypto), founder traps
+  section, explicit "needs a real lawyer" line.
+- ✅ `PIVOT_OR_PERSEVERE` — Build-Measure-Learn framing, runway
+  redefined as "pivots remaining," 5 pre-decision questions, 11 Ries
+  pivot types named, 7-row honest-data decision matrix scoring 7-35
+  → recommendation. Sunk-cost language detector. Brutal honesty
+  built in.
+
+**Bonus addition 2026-04-30 (founder ask during Day 5):**
+- ✅ `UI_DESIGN` — 5-layer spec framework: IA tree → page-level
+  wireframe specs → design system tokens (brand-kit-aware) →
+  component inventory → tool-specific paste-ready prompts for **v0,
+  Lovable, Figma Make, and Google Stitch 2.0**. Doesn't try to draw
+  pixels itself — produces structured specs that 10x the output of
+  the AI design tools when the founder pastes them in. Strategic
+  upstream of v0 / Lovable.
+
+**Decision-log polish (also Day 5):**
+- ✅ DecisionFormModal accepts `defaultCategory` for context-aware
+  preselection.
+- ✅ App.tsx adds a "Log decision" button in the chat header
+  (visible when project is active). Mode-aware mapping —
+  PRICING → pricing, FUNDRAISING → fundraise, etc. Founder can
+  capture decisions mid-chat without leaving the conversation.
 
 ### 🚧 Phase 5 — Frameworks library
 
