@@ -1,5 +1,6 @@
 import { KB_01, KB_02, KB_03, KB_04 } from './kb-constants';
 import { getModeKB, SKILLS_KB } from './kb-mode-loader';
+import { getFrameworkKB, getFrameworkMeta, type FrameworkId } from './kb-framework-loader';
 
 export interface KBToggles {
   kb01: boolean;
@@ -31,8 +32,9 @@ export function buildSystemPrompt(params: {
   userName: string;
   isBrutalHonesty: boolean;
   projectContext?: string | null;
+  activeFrameworkId?: FrameworkId | null;
 }): string {
-  const { systemPromptBase, kbToggles, memoryItems, activeMode, userName, isBrutalHonesty, projectContext } = params;
+  const { systemPromptBase, kbToggles, memoryItems, activeMode, userName, isBrutalHonesty, projectContext, activeFrameworkId } = params;
   const parts: string[] = [];
 
   parts.push(`[COCKROACH AGENT SYSTEM PROMPT]\n${systemPromptBase}`);
@@ -56,6 +58,18 @@ export function buildSystemPrompt(params: {
 
   if (projectContext) {
     parts.push(`[PROJECT CONTEXT]\n${projectContext}\n[/PROJECT CONTEXT]`);
+  }
+
+  // On-demand framework KB — injected when the user clicks "Run framework"
+  // on a project. Scoped to the next chat turn (UI clears it after send).
+  if (activeFrameworkId) {
+    const frameworkKB = getFrameworkKB(activeFrameworkId);
+    const meta = getFrameworkMeta(activeFrameworkId);
+    if (frameworkKB && meta) {
+      parts.push(
+        `[FRAMEWORK KB — ${meta.name} (${meta.origin})]\nThe user has explicitly invoked this framework. Run it on this project's context. Follow the Output structure section verbatim.\n\n${frameworkKB}`,
+      );
+    }
   }
 
   if (memoryItems.length > 0) {

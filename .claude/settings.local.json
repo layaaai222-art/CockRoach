@@ -26,7 +26,12 @@
       "mcp__vercel__list_teams",
       "mcp__vercel__list_projects",
       "mcp__vercel__get_project",
-      "mcp__vercel__list_deployments"
+      "mcp__vercel__list_deployments",
+      "WebSearch"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "supabase"
+  ]
 }

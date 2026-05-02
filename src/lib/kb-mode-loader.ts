@@ -18,6 +18,8 @@ import CUSTOMER_DISCOVERY_KB from '../../kb/modes/CUSTOMER_DISCOVERY.md?raw';
 import LEGAL_AND_OPS_KB from '../../kb/modes/LEGAL_AND_OPS.md?raw';
 import PIVOT_OR_PERSEVERE_KB from '../../kb/modes/PIVOT_OR_PERSEVERE.md?raw';
 import UI_DESIGN_KB from '../../kb/modes/UI_DESIGN.md?raw';
+import PAID_ADS_KB from '../../kb/modes/PAID_ADS.md?raw';
+import SEO_AND_CONTENT_KB from '../../kb/modes/SEO_AND_CONTENT.md?raw';
 import SKILLS_KB_TEXT from '../../kb/SKILLS.md?raw';
 
 export const SKILLS_KB = SKILLS_KB_TEXT;
@@ -40,6 +42,8 @@ export const MODE_KBS: Record<string, string> = {
   PIVOT_OR_PERSEVERE: PIVOT_OR_PERSEVERE_KB,
   UI_DESIGN: UI_DESIGN_KB,
   IMAGE_PROMPTING: IMAGE_PROMPTING_KB,
+  PAID_ADS: PAID_ADS_KB,
+  SEO_AND_CONTENT: SEO_AND_CONTENT_KB,
 };
 
 export function getModeKB(activeMode: string): string | null {

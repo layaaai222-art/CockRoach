@@ -3,7 +3,7 @@
 > **Working file for the build team.** Updated continuously as work
 > progresses. Read this first to know where the project stands.
 
-**Last updated:** 2026-06-29
+**Last updated:** 2026-05-02 (Day 6 — frameworks library + IG-derived skill ports)
 
 ---
 
@@ -597,6 +597,75 @@ launch, freeze all non-essential testing and shift to mock-mode for QA.
 - **Next:** Day 5 (specialist modes — CUSTOMER_DISCOVERY,
   LEGAL_AND_OPS, PIVOT_OR_PERSEVERE) + decision-log UX polish in
   chat.
+
+### 2026-05-02 — Phase 1 Day 6: Frameworks library + IG-derived skill ports
+- **Founder ask mid-day.** Abhi pasted 9 GitHub repos + 6 AI products
+  from two Instagram posts and asked: extract the relevant skills,
+  port them into CockRoach so every mode gets stronger. WebFetch
+  blocked by IG auth gate; Abhi pasted the names; I researched all
+  15 in parallel via WebSearch.
+- **Triage of the 15:**
+  - Direct skill ports (3): `claude-ads` → new PAID_ADS mode;
+    `toprank` → new SEO_AND_CONTENT mode; the AI-products list
+    (Prism / Astrio / MascotVibe / Perfectly / Inception / theORQL)
+    → new COMPETITIVE_TEARDOWN framework with these as 2026 case
+    studies.
+  - Reference / future infra (not ported now): `context-mode`
+    (already partly addressed in SKILLS.md), `agentic-inbox` (post-
+    launch email agent ref), `hyperframes` (future demo-video tool),
+    `camofox-browser` (api/scrape upgrade path), `Open-Generative-AI`
+    (model menu ref for IMAGE_PROMPTING), `FinceptTerminal` /
+    `autoHedge` (light reference for FUNDRAISING).
+- **Shipped (frameworks library + skill ports, single commit):**
+  - 9 framework KBs in `kb/frameworks/`:
+    - `VALUE_EQUATION.md` (Hormozi)
+    - `LEAN_CANVAS.md` (Maurya 9-block canvas)
+    - `JOBS_TO_BE_DONE.md` (Christensen four forces + Ulwick switch
+      interview)
+    - `NORTH_STAR_METRIC.md` (Sean Ellis criteria + 40% test +
+      input metric tree)
+    - `VALUE_LADDER.md` (Brunson tripwire→high-ticket sequencing)
+    - `VALUE_MATRIX.md` (pain×gain×segment×feature fit grid; 4
+      patterns: tight/diffuse/wrong-segment/wrong-product)
+    - `ACP.md` (Isenberg Acquisition×Churn×Pricing diagnostic)
+    - `DREAM_100.md` (Holmes/Brunson; B2B-ABM and B2C-creator
+      variants; 4-touch 6-month rhythm)
+    - `COMPETITIVE_TEARDOWN.md` (Dunford 5-layer teardown; with
+      Prism/Astrio/MascotVibe/Perfectly/Inception/theORQL as
+      worked 2026 examples)
+  - 2 new mode KBs in `kb/modes/`:
+    - `PAID_ADS.md` — 7-block audit (account/targeting/creative/LP/
+      tracking/bidding/reporting), channel-fit by ACV, hook taxonomy,
+      RSA checklist, creative briefs. Distilled from claude-ads.
+    - `SEO_AND_CONTENT.md` — 5-pillar audit (technical/on-page/
+      content/authority/UX), keyword research workflow with cluster
+      scoring, E-E-A-T content brief template, programmatic-SEO
+      criteria, publishing rhythm. Distilled from toprank.
+  - `src/lib/kb-framework-loader.ts` — new loader (mirrors mode loader
+    pattern); exports FRAMEWORK_KBS + FRAMEWORK_CATALOG metadata
+    (id, name, origin, oneLine, bestFor) for UI surfacing.
+  - `src/lib/kb-mode-loader.ts` — added PAID_ADS + SEO_AND_CONTENT
+    imports + map entries.
+  - `src/lib/system-prompt-builder.ts` — accepts optional
+    `activeFrameworkId`; injects `[FRAMEWORK KB — {Name} ({Origin})]`
+    block when set, with directive to follow the Output structure
+    section verbatim.
+  - `src/App.tsx` — added Megaphone + TrendingUp icons; PAID_ADS and
+    SEO_AND_CONTENT entries in APP_MODES `operator` group;
+    `modeToDecisionCategory` mapper updated (both → `gtm`).
+- **Total mode count: 19** (was 17). Frameworks: 9 (new sub-system).
+- **Verified:** `npm run typecheck` ✓; `npm run lint` 0 errors
+  (42 pre-existing `any` warnings, non-blocking).
+- **Skipped (deferred):** "Run framework" quick-action UI button on
+  project detail page — wired the KB injection plumbing but UI
+  surfacing comes next. The chat can still receive a framework via
+  prompt scaffolding once we add the dropdown. Also deferred:
+  internal `api/scrape` swap to camofox; demo-video tooling via
+  hyperframes; agentic-inbox post-launch.
+- **Next:** Wire the "Run framework" UI on project detail page
+  (small Frameworks Quick Actions section) → push commit, then
+  Day 7 (Discovery enhancements: ideas table + catalog,
+  AI_FOUNDER_FIT assessment, Idea of the Day).
 
 ---
 

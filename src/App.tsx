@@ -42,6 +42,8 @@ import {
   Scale,
   GitBranch,
   LayoutDashboard,
+  Megaphone,
+  TrendingUp,
 } from 'lucide-react';
 import DocumentViewer from './components/DocumentViewer';
 import { motion, AnimatePresence } from 'motion/react';
@@ -71,6 +73,8 @@ function modeToDecisionCategory(mode: string): DecisionCategory {
   switch (mode) {
     case 'PRICING':            return 'pricing';
     case 'GO_TO_MARKET':       return 'gtm';
+    case 'PAID_ADS':           return 'gtm';
+    case 'SEO_AND_CONTENT':    return 'gtm';
     case 'FUNDRAISING':        return 'fundraise';
     case 'HIRING_AND_EQUITY':  return 'hiring';
     case 'LEGAL_AND_OPS':      return 'legal';
@@ -114,6 +118,8 @@ const APP_MODES: AppMode[] = [
   { id: 'POSITIONING',         icon: Rocket,          label: 'Brand & Positioning',  group: 'operator' },
   { id: 'PRICING',             icon: Tag,             label: 'Pricing Strategy',     group: 'operator' },
   { id: 'GO_TO_MARKET',        icon: Target,          label: 'Go-to-Market',         group: 'operator' },
+  { id: 'PAID_ADS',            icon: Megaphone,       label: 'Paid Ads',             group: 'operator' },
+  { id: 'SEO_AND_CONTENT',     icon: TrendingUp,      label: 'SEO & Content',        group: 'operator' },
   { id: 'EXECUTION',           icon: CheckSquare,     label: 'Build Plan',           group: 'operator' },
   { id: 'FUNDRAISING',         icon: PiggyBank,       label: 'Fundraising',          group: 'operator' },
   { id: 'HIRING_AND_EQUITY',   icon: UserPlus,        label: 'Hiring & Equity',      group: 'operator' },
