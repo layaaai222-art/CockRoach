@@ -105,7 +105,19 @@ export default function FounderFitModal({ open, onClose, userId, userName, onSav
     }
 
     // Soft-replace: clear prior founder_fit memories, then insert fresh.
-    await supabase.from('memory_items').delete().eq('user_id', userId).eq('category', 'founder_fit');
+    // If the delete fails (network blip), we still attempt the insert — the
+    // user will see duplicates rather than lose work. The insert error is
+    // user-facing.
+    const { error: delErr } = await supabase
+      .from('memory_items')
+      .delete()
+      .eq('user_id', userId)
+      .eq('category', 'founder_fit');
+    if (delErr) {
+      // Non-fatal — log to console, surface as a softer warning, continue.
+      // eslint-disable-next-line no-console
+      console.warn('Could not clear prior founder-fit memories:', delErr.message);
+    }
     const { error } = await supabase.from('memory_items').insert(records);
     setSaving(false);
 
