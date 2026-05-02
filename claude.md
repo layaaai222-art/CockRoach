@@ -3,7 +3,7 @@
 > **Working file for the build team.** Updated continuously as work
 > progresses. Read this first to know where the project stands.
 
-**Last updated:** 2026-05-02 (Day 6 — frameworks library + IG-derived skill ports)
+**Last updated:** 2026-05-03 (Phase 1.5 — auto-routing + bundle split + onboarding + latent features)
 
 ---
 
@@ -539,6 +539,66 @@ launch, freeze all non-essential testing and shift to mock-mode for QA.
 - **Next:** Day 6 (frameworks library — Value Equation, ACP, Value
   Matrix, Value Ladder + "Run framework" quick action on project
   page).
+
+### 2026-05-03 — Phase 1.5: "Make it better" (auto-routing + bundle + onboarding + latent features)
+- **Why this phase exists.** With 19 modes + 9 frameworks the
+  selection UX got hairy and the bundle was shipping 268 KB of
+  static markdown to every visitor. Decided on an auto-routing
+  default plus targeted improvements before Phase 2 testing.
+- **Phase A — Auto-routing + restructured picker.**
+  - `api/route-mode.js` Vercel function — calls Azure with a tight
+    JSON-mode prompt, embeds the mode catalog inline, falls back to
+    GENERAL on any failure (4s hard timeout, 60 req/min).
+  - `AUTO` is now the default mode. App.tsx send path resolves AUTO
+    via the router; activeMode stays AUTO so the UI persists.
+  - Restructured picker — search box, 5 collapsible sections (Smart
+    / Core / Build / Discover / Creative), one-line description per
+    mode, count badges. Mode pill shows "Auto → PRICING" when
+    routed.
+  - Project-stage bias in the router system prompt (idea →
+    validation/discovery; building → execution/gtm; launched →
+    pivot/pricing/hiring) + founder-fit memories injected as routing
+    context.
+  - `CapabilityChips` component on every assistant message: "Auto-
+    picked: [PRICING] [Value Equation]" or "Used: …". Educates users
+    about the capability surface passively.
+- **Phase B — Code-split mode + framework KBs.**
+  - kb-mode-loader.ts and kb-framework-loader.ts replace static
+    `?raw` imports with `() => import(...?raw)` thunks. Vite emits
+    a separate chunk per loader.
+  - buildSystemPrompt becomes async; awaits both KBs in parallel.
+  - SettingsAgentBrain inline preview converted to useEffect+state
+    with cancellation token.
+  - Mode picker preloads selected mode KB on click so first-message
+    latency stays flat.
+  - Bundle dropped 3,316 KB / 994 KB gz → 3,160 KB / 934 KB gz
+    (-156 KB raw / -60 KB gz). 28 new chunks (3-9 KB gz each).
+- **Phase C — Onboarding wizard.**
+  - `OnboardingWizard.tsx` — 3 steps: Where-are-you (have-idea /
+    need-idea / exploring) → Founder Fit (reuses FounderFitModal) →
+    sample prompts (curated by chosen path; click → prefills input
+    + switches mode).
+  - `shouldShowOnboarding(userId, hasChats, hasProjects)` helper:
+    empty-state + localStorage flag.
+  - Auto-trigger 600ms after user + chats + projects load.
+- **Phase D — Latent features.**
+  - **D1**: DocumentViewer accepts `onExported` callback. App wires
+    it: when project active, toast shows "Save to project" action;
+    inserts into project_artifacts with auto-detected kind.
+  - **D2**: `api/generate-pulse.js` — fetches last 7 days of
+    decisions + chats, asks Azure for 1-page weekly pulse, upserts
+    into project_pulse_log. New "Weekly Pulse" panel on InboxTab
+    with Generate/Regenerate button + markdown render.
+  - **D3 (deferred)**: brand kit needs Supabase Storage setup;
+    waiting until post-auth.
+  - **D4**: memory list items color-coded by category (founder_fit
+    amber, general muted, others primary).
+- **Verified:** typecheck ✓, lint 0 errors, build ✓ across all 4
+  phases. 4 commits pushed to both remotes (4asaanAI + layaaai222-
+  art).
+- **Next:** Phase 2 of original launch plan — bug bash + perf check
+  + cross-browser/PWA + cost monitoring, before Phase 3
+  (auth/billing).
 - **Research lock-in.** Pulled 2026 data on each topic to make the KBs
   decision-ready, not generic:
   - PRICING: Van Westendorp PSM still gold standard; anchor Pro tier
