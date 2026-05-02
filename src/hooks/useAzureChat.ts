@@ -15,6 +15,10 @@ interface StreamOptions {
   messages: ChatApiMessage[];
   temperature?: number;
   onChunk: (text: string) => void;
+  /** Best-effort identifying fields passed to /api/chat for cost tracking. */
+  userId?: string | null;
+  chatId?: string | null;
+  projectId?: string | null;
 }
 
 /**
@@ -37,7 +41,7 @@ export function useAzureChat() {
     setIsStreaming(false);
   }, []);
 
-  const streamResponse = React.useCallback(async ({ messages, temperature = 0.7, onChunk }: StreamOptions): Promise<string> => {
+  const streamResponse = React.useCallback(async ({ messages, temperature = 0.7, onChunk, userId, chatId, projectId }: StreamOptions): Promise<string> => {
     // Abort any prior in-flight stream — only one generation at a time
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -48,7 +52,7 @@ export function useAzureChat() {
       const resp = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, temperature }),
+        body: JSON.stringify({ messages, temperature, userId, chatId, projectId }),
         signal: controller.signal,
       });
 

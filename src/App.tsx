@@ -325,12 +325,17 @@ export default function App() {
          });
       }
 
-      await loadChatHistory(user.id);
-      await loadSystemPrompt(user.id);
-      await loadMemoryItems(user.id);
-    } catch (e: any) {
-      logger.error('User sync failed', { error: e?.message ?? String(e) });
-      toast.error(`Critical Sync Error: ${e.message}`);
+      // These three loads are independent — fire in parallel to save
+      // ~200-400 ms on cold start.
+      await Promise.all([
+        loadChatHistory(user.id),
+        loadSystemPrompt(user.id),
+        loadMemoryItems(user.id),
+      ]);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logger.error('User sync failed', { error: msg });
+      toast.error(`Critical Sync Error: ${msg}`);
     } finally {
       setAuthChecking(false);
     }
@@ -405,8 +410,15 @@ export default function App() {
 
   const streamAzureResponse = React.useCallback(
     (apiMessages: { role: string; content: string }[], onChunk: (text: string) => void) =>
-      streamResponse({ messages: apiMessages, temperature: 0.7, onChunk }),
-    [streamResponse],
+      streamResponse({
+        messages: apiMessages,
+        temperature: 0.7,
+        onChunk,
+        userId: currentUser?.id ?? null,
+        chatId: activeChatId ?? null,
+        projectId: activeProjectId ?? null,
+      }),
+    [streamResponse, currentUser?.id, activeChatId, activeProjectId],
   );
 
   const loadChatHistory = async (userId: string) => {
@@ -618,10 +630,15 @@ export default function App() {
       let resolvedMode = activeMode;
       if (activeMode === 'AUTO') {
         setIsRouting(true);
+        // Hard client-side timeout — server has its own 4s budget, but if
+        // the network itself stalls we don't want the UI frozen forever.
+        const abort = new AbortController();
+        const timeoutId = setTimeout(() => abort.abort(), 6000);
         try {
           const routerResp = await fetch('/api/route-mode', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            signal: abort.signal,
             body: JSON.stringify({
               message: rawContent,
               projectStage: activeProject?.stage ?? null,
@@ -649,6 +666,7 @@ export default function App() {
           logger.warn('Router unavailable; falling back to GENERAL', { error: e instanceof Error ? e.message : String(e) });
           resolvedMode = 'GENERAL';
         } finally {
+          clearTimeout(timeoutId);
           setIsRouting(false);
         }
       }
@@ -725,23 +743,33 @@ export default function App() {
       setSearchResults({ chats: [], messages: [] });
       return;
     }
+    let cancelled = false;
     const timer = setTimeout(async () => {
-      const q = `%${searchQuery}%`;
-      const [{ data: chats }, { data: msgs }] = await Promise.all([
-        supabase.from('chats').select('id, title, updated_at').eq('user_id', currentUser.id).ilike('title', q).limit(5),
-        supabase.from('messages').select('id, chat_id, content, role').ilike('content', q).limit(8),
-      ]);
-      // Tag messages with their chat title
-      const chatIds = [...new Set((msgs || []).map(m => m.chat_id))];
-      let chatMap: Record<string, string> = {};
-      if (chatIds.length) {
-        const { data: chatRows } = await supabase.from('chats').select('id, title').in('id', chatIds);
-        chatMap = Object.fromEntries((chatRows || []).map(c => [c.id, c.title]));
+      try {
+        const q = `%${searchQuery}%`;
+        const [chatsRes, msgsRes] = await Promise.all([
+          supabase.from('chats').select('id, title, updated_at').eq('user_id', currentUser.id).ilike('title', q).limit(5),
+          supabase.from('messages').select('id, chat_id, content, role').ilike('content', q).limit(8),
+        ]);
+        if (cancelled) return;
+        if (chatsRes.error) logger.warn('Search chats query failed', { error: chatsRes.error.message });
+        if (msgsRes.error) logger.warn('Search messages query failed', { error: msgsRes.error.message });
+        const chats = chatsRes.data ?? [];
+        const msgs = msgsRes.data ?? [];
+        const chatIds = [...new Set(msgs.map(m => m.chat_id))];
+        let chatMap: Record<string, string> = {};
+        if (chatIds.length) {
+          const { data: chatRows } = await supabase.from('chats').select('id, title').in('id', chatIds);
+          if (cancelled) return;
+          chatMap = Object.fromEntries((chatRows ?? []).map(c => [c.id, c.title]));
+        }
+        const taggedMsgs = msgs.filter(m => m.role !== 'system').map(m => ({ ...m, chatTitle: chatMap[m.chat_id] || 'Untitled' }));
+        setSearchResults({ chats, messages: taggedMsgs });
+      } catch (e) {
+        if (!cancelled) logger.warn('Search failed', { error: e instanceof Error ? e.message : String(e) });
       }
-      const taggedMsgs = (msgs || []).filter(m => m.role !== 'system').map(m => ({ ...m, chatTitle: chatMap[m.chat_id] || 'Untitled' }));
-      setSearchResults({ chats: chats || [], messages: taggedMsgs });
     }, 280);
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [searchQuery, currentUser]);
 
   const handleSearchSelect = (chatId: string) => {
@@ -755,7 +783,7 @@ export default function App() {
   const handleQuickAddMemory = async () => {
     if (!quickMemory.trim() || !currentUser) return;
     const { data, error } = await supabase.from('memory_items').insert({ user_id: currentUser.id, content: quickMemory.trim(), category: 'general' }).select().single();
-    if (error) { toast.error('Memory save failed'); return; }
+    if (error || !data) { toast.error(`Memory save failed${error?.message ? `: ${error.message}` : ''}`); return; }
     setMemoryItems([data, ...memoryItems]);
     setQuickMemory('');
     toast.success('Memory saved');
@@ -842,8 +870,8 @@ export default function App() {
       msgId = msgId ?? `summary-${Date.now()}`;
       setSummaryMeta(prev => new Map(prev).set(msgId!, content));
       setMessages(prev => [...prev, { id: msgId, role: 'assistant', content: fullContent }]);
-    } catch (e: any) {
-      toast.error(`Summary failed: ${e.message}`);
+    } catch (e: unknown) {
+      toast.error(`Summary failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setIsTyping(false);
       setStreamingContent('');

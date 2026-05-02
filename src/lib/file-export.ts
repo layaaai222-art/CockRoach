@@ -1,8 +1,7 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType } from 'docx';
-import * as XLSX from '@e965/xlsx';
-import pptxgen from 'pptxgenjs';
+// Heavy export libs (jspdf ~80kb, docx ~120kb, xlsx ~250kb, pptxgenjs ~250kb)
+// are dynamically imported inside each download* function so they only ship
+// to clients who actually export. The download functions become async; the
+// existing UI already awaits them.
 
 // ── Markdown block parser ──────────────────────────────────────────────────
 
@@ -110,7 +109,9 @@ export function downloadText(content: string, filename = 'export') {
 
 // ── PDF ───────────────────────────────────────────────────────────────────
 
-export function downloadPDF(content: string, filename = 'export') {
+export async function downloadPDF(content: string, filename = 'export') {
+  const { default: jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const M = 18;
   const PW = doc.internal.pageSize.getWidth() - M * 2;
@@ -177,20 +178,22 @@ export function downloadPDF(content: string, filename = 'export') {
 
 // ── DOCX ──────────────────────────────────────────────────────────────────
 
-function parseInlineRuns(text: string): TextRun[] {
-  const runs: TextRun[] = [];
-  const parts = text.split(/(\*\*[^*]+?\*\*|\*[^*]+?\*|`[^`]+`)/);
-  for (const p of parts) {
-    if (!p) continue;
-    if (p.startsWith('**') && p.endsWith('**')) runs.push(new TextRun({ text: p.slice(2, -2), bold: true }));
-    else if (p.startsWith('*') && p.endsWith('*')) runs.push(new TextRun({ text: p.slice(1, -1), italics: true }));
-    else if (p.startsWith('`') && p.endsWith('`')) runs.push(new TextRun({ text: p.slice(1, -1), font: 'Courier New', size: 18 }));
-    else runs.push(new TextRun({ text: p }));
-  }
-  return runs;
-}
-
 export async function downloadDOCX(content: string, filename = 'export') {
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType } = await import('docx');
+
+  const parseInlineRuns = (text: string): InstanceType<typeof TextRun>[] => {
+    const runs: InstanceType<typeof TextRun>[] = [];
+    const parts = text.split(/(\*\*[^*]+?\*\*|\*[^*]+?\*|`[^`]+`)/);
+    for (const p of parts) {
+      if (!p) continue;
+      if (p.startsWith('**') && p.endsWith('**')) runs.push(new TextRun({ text: p.slice(2, -2), bold: true }));
+      else if (p.startsWith('*') && p.endsWith('*')) runs.push(new TextRun({ text: p.slice(1, -1), italics: true }));
+      else if (p.startsWith('`') && p.endsWith('`')) runs.push(new TextRun({ text: p.slice(1, -1), font: 'Courier New', size: 18 }));
+      else runs.push(new TextRun({ text: p }));
+    }
+    return runs;
+  };
+
   const headingLevels = [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3, HeadingLevel.HEADING_4, HeadingLevel.HEADING_5, HeadingLevel.HEADING_6];
   const children: any[] = [];
 
@@ -222,7 +225,8 @@ export async function downloadDOCX(content: string, filename = 'export') {
 
 // ── XLSX ──────────────────────────────────────────────────────────────────
 
-export function downloadXLSX(content: string, filename = 'export') {
+export async function downloadXLSX(content: string, filename = 'export') {
+  const XLSX = await import('@e965/xlsx');
   const blocks = parseMarkdownBlocks(content);
   const wb = XLSX.utils.book_new();
   const tables = blocks.filter(b => b.type === 'table');
@@ -280,7 +284,8 @@ function tableToChartData(headers: string[], rows: string[][]) {
   }));
 }
 
-export function downloadPPTX(content: string, filename = 'export') {
+export async function downloadPPTX(content: string, filename = 'export') {
+  const { default: pptxgen } = await import('pptxgenjs');
   const prs = new pptxgen();
   prs.layout = 'LAYOUT_16x9';
   const BG = '0C0C0C';

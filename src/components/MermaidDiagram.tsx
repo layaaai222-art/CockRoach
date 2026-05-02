@@ -1,40 +1,55 @@
 import React from 'react';
-import mermaid from 'mermaid';
-import DOMPurify from 'dompurify';
 import { Code2, Image, ZoomIn, ZoomOut, RotateCcw, Download } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-let initialized = false;
-function ensureInit() {
-  if (initialized) return;
-  initialized = true;
-  mermaid.initialize({
-    startOnLoad: false,
-    theme: 'dark',
-    themeVariables: {
-      background: '#0c0c0c',
-      mainBkg: '#141414',
-      primaryColor: '#8B1414',
-      primaryTextColor: '#eeeeee',
-      primaryBorderColor: '#333333',
-      lineColor: '#555555',
-      secondaryColor: '#1a1a1a',
-      tertiaryColor: '#1f1f1f',
-      edgeLabelBackground: '#0c0c0c',
-      clusterBkg: '#141414',
-      titleColor: '#cccccc',
-      nodeTextColor: '#dddddd',
-      fontFamily: 'Calibri, system-ui, sans-serif',
-    },
-    flowchart: { curve: 'basis', htmlLabels: false },
-    securityLevel: 'strict',
-  });
+// Mermaid is huge (~70 KB gz including all sub-renderers). Lazy-load on
+// first <MermaidDiagram> mount so users who never see a chart don't pay.
+type MermaidLib = typeof import('mermaid')['default'];
+type DOMPurifyLib = typeof import('dompurify')['default'];
+let mermaidPromise: Promise<{ mermaid: MermaidLib; dompurify: DOMPurifyLib }> | null = null;
+function loadMermaid() {
+  if (!mermaidPromise) {
+    mermaidPromise = Promise.all([
+      import('mermaid').then(m => m.default),
+      import('dompurify').then(m => m.default),
+    ]).then(([mermaid, dompurify]) => {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'dark',
+        themeVariables: {
+          background: '#0c0c0c',
+          mainBkg: '#141414',
+          primaryColor: '#8B1414',
+          primaryTextColor: '#eeeeee',
+          primaryBorderColor: '#333333',
+          lineColor: '#555555',
+          secondaryColor: '#1a1a1a',
+          tertiaryColor: '#1f1f1f',
+          edgeLabelBackground: '#0c0c0c',
+          clusterBkg: '#141414',
+          titleColor: '#cccccc',
+          nodeTextColor: '#dddddd',
+          fontFamily: 'Calibri, system-ui, sans-serif',
+        },
+        flowchart: { curve: 'basis', htmlLabels: false },
+        securityLevel: 'strict',
+      });
+      return { mermaid, dompurify };
+    });
+  }
+  return mermaidPromise;
 }
 
+// Defense-in-depth XSS config for sanitizing Mermaid-rendered SVG.
+// Mermaid runs with securityLevel:'strict' but we still strip script,
+// foreignObject, on* handlers, and javascript:/data: vectors via
+// FORBID_ATTR + ALLOWED_URI_REGEXP.
 const SVG_SANITIZE_CONFIG = {
   USE_PROFILES: { svg: true, svgFilters: true },
   FORBID_TAGS: ['script', 'foreignObject'],
-  FORBID_ATTR: ['onload', 'onerror', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
+  FORBID_ATTR: ['onload', 'onerror', 'onclick', 'onmouseover', 'onfocus', 'onblur', 'href', 'xlink:href'],
+  // Restrict any remaining URL-bearing attributes to safe schemes.
+  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|ftp|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
 };
 
 let _idCounter = 0;
@@ -52,19 +67,23 @@ export default function MermaidDiagram({ code }: Props) {
   const id = React.useRef(`mermaid-cr-${++_idCounter}`).current;
 
   React.useEffect(() => {
-    ensureInit();
     let cancelled = false;
     setRendering(true);
     setError('');
     setSvg('');
 
-    mermaid.render(id, code.trim()).then(({ svg: rendered }) => {
+    loadMermaid().then(({ mermaid, dompurify }) => {
       if (cancelled) return;
-      const sanitized = DOMPurify.sanitize(rendered, SVG_SANITIZE_CONFIG);
-      setSvg(sanitized);
-      setRendering(false);
-    }).catch((e: Error) => {
-      if (!cancelled) { setError(e.message || 'Render failed'); setRendering(false); }
+      mermaid.render(id, code.trim()).then(({ svg: rendered }) => {
+        if (cancelled) return;
+        const sanitized = dompurify.sanitize(rendered, SVG_SANITIZE_CONFIG);
+        setSvg(sanitized);
+        setRendering(false);
+      }).catch((e: Error) => {
+        if (!cancelled) { setError(e.message || 'Render failed'); setRendering(false); }
+      });
+    }).catch(() => {
+      if (!cancelled) { setError('Diagram renderer failed to load'); setRendering(false); }
     });
 
     return () => { cancelled = true; };

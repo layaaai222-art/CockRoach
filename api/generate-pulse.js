@@ -36,6 +36,13 @@ function rateLimitExceeded(ip) {
   }
   window.push(now);
   hits.set(ip, window);
+  // Periodic cleanup so the in-memory map can't grow without bound during
+  // a long-lived warm function. Mirrors api/chat.js and route-mode.js.
+  if (hits.size > 1000) {
+    for (const [k, ts] of hits) {
+      if (!ts.some(t => now - t < RATE_LIMIT.windowMs)) hits.delete(k);
+    }
+  }
   return false;
 }
 

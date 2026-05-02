@@ -241,6 +241,36 @@ create index if not exists idx_memory_items_project_id
   on public.memory_items(project_id) where project_id is not null;
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- API usage log — for cost monitoring per user/day, populated by
+-- /api/chat, /api/route-mode, /api/generate-pulse on completion.
+-- Identifying fields are best-effort (no auth yet) — we log what the
+-- client tells us; intended for analytical dashboards not billing.
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.api_usage_log (
+  id uuid primary key default gen_random_uuid(),
+  user_id text,
+  chat_id uuid,
+  project_id uuid,
+  endpoint text not null,                  -- 'chat' | 'route_mode' | 'generate_pulse'
+  model text,
+  prompt_tokens int,
+  completion_tokens int,
+  total_tokens int,
+  estimated_cost_usd numeric(10,6),
+  status text default 'ok' not null,        -- 'ok' | 'error' | 'rate_limited'
+  ms int,                                   -- request duration
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists idx_api_usage_user_day
+  on public.api_usage_log(user_id, created_at desc);
+create index if not exists idx_api_usage_endpoint_day
+  on public.api_usage_log(endpoint, created_at desc);
+
+alter table public.api_usage_log disable row level security;
+grant all on table public.api_usage_log to anon, authenticated;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- Triggers
 -- ─────────────────────────────────────────────────────────────────────────────
 create or replace function public.set_updated_at_now()

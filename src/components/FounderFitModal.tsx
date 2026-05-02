@@ -104,27 +104,31 @@ export default function FounderFitModal({ open, onClose, userId, userName, onSav
       return;
     }
 
-    // Soft-replace: clear prior founder_fit memories, then insert fresh.
-    // If the delete fails (network blip), we still attempt the insert — the
-    // user will see duplicates rather than lose work. The insert error is
-    // user-facing.
+    // Two-phase replace: insert FIRST so we don't lose data if the
+    // network blips between operations. If the insert succeeds, then
+    // clean up old founder_fit rows (matching by created_at so we
+    // don't delete the rows we just wrote).
+    const insertCutoff = new Date().toISOString();
+    const { error } = await supabase.from('memory_items').insert(records);
+    if (error) {
+      setSaving(false);
+      toast.error('Could not save assessment — try again.');
+      return;
+    }
+
     const { error: delErr } = await supabase
       .from('memory_items')
       .delete()
       .eq('user_id', userId)
-      .eq('category', 'founder_fit');
+      .eq('category', 'founder_fit')
+      .lt('created_at', insertCutoff);
     if (delErr) {
-      // Non-fatal — log to console, surface as a softer warning, continue.
+      // Non-fatal — user may see duplicates briefly; old rows will be
+      // cleaned up next save attempt.
       // eslint-disable-next-line no-console
       console.warn('Could not clear prior founder-fit memories:', delErr.message);
     }
-    const { error } = await supabase.from('memory_items').insert(records);
     setSaving(false);
-
-    if (error) {
-      toast.error('Could not save assessment — try again.');
-      return;
-    }
 
     setDone(true);
     toast.success('Founder-fit profile saved to memory');

@@ -1,6 +1,10 @@
 // Vercel serverless function — Azure OpenAI chat proxy.
 // Streams the SSE response from Azure back to the client so the API key
 // never touches the browser. Origin allow-list + per-IP rate limit.
+// On stream completion, captures token usage and logs to api_usage_log
+// for cost monitoring (best-effort, fire-and-forget).
+
+import { createClient } from '@supabase/supabase-js';
 
 const ALLOWED_ORIGINS = [
   /^https?:\/\/localhost(:\d+)?$/,
@@ -49,6 +53,45 @@ const MAX_TOTAL_CHARS = 600_000;
 // unbounded output (→ unbounded Azure bill). Chat interactions rarely need
 // more than ~2K tokens; 4K is a comfortable ceiling.
 const MAX_COMPLETION_TOKENS = 4000;
+
+// Rough Azure pricing for cost estimation (gpt-5.3-class deployments,
+// USD per 1K tokens). Approximate; the dashboard is for trend-watching,
+// not billing accuracy.
+const COST_PER_1K_INPUT = 0.0025;
+const COST_PER_1K_OUTPUT = 0.01;
+
+function estimateCostUsd(promptTokens, completionTokens) {
+  const inCost = (promptTokens / 1000) * COST_PER_1K_INPUT;
+  const outCost = (completionTokens / 1000) * COST_PER_1K_OUTPUT;
+  return Math.round((inCost + outCost) * 1_000_000) / 1_000_000;
+}
+
+// Fire-and-forget usage logger. Failures are swallowed — cost-tracking
+// must never break the chat path.
+function logUsage({ userId, chatId, projectId, model, promptTokens, completionTokens, status, ms }) {
+  try {
+    const sbUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    if (!sbUrl || !sbKey) return;
+    const sb = createClient(sbUrl, sbKey);
+    const total = (promptTokens || 0) + (completionTokens || 0);
+    void sb.from('api_usage_log').insert({
+      user_id: userId ?? null,
+      chat_id: chatId ?? null,
+      project_id: projectId ?? null,
+      endpoint: 'chat',
+      model: model ?? null,
+      prompt_tokens: promptTokens ?? null,
+      completion_tokens: completionTokens ?? null,
+      total_tokens: total || null,
+      estimated_cost_usd: total ? estimateCostUsd(promptTokens || 0, completionTokens || 0) : null,
+      status: status ?? 'ok',
+      ms: ms ?? null,
+    });
+  } catch {
+    /* swallow — logging must never break chat */
+  }
+}
 
 function validateMessages(messages) {
   if (!Array.isArray(messages)) return 'messages must be an array';
@@ -138,16 +181,56 @@ export default async function handler(req, res) {
   res.setHeader('X-Accel-Buffering', 'no');
   res.status(200);
 
+  const startMs = Date.now();
   const reader = azureResp.body.getReader();
+  const decoder = new TextDecoder();
+  let usage = null;
+  let modelUsed = null;
+  let tail = '';
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       res.write(value);
+      // Parse SSE chunks server-side to capture the final `usage` block
+      // emitted when stream_options.include_usage is true. We don't break
+      // streaming — we read the same bytes we forwarded.
+      const text = decoder.decode(value, { stream: true });
+      tail = (tail + text).slice(-8000);
+      const lines = (tail.match(/data: [^\n]+/g) || []);
+      for (const line of lines) {
+        const json = line.slice(6).trim();
+        if (json === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(json);
+          if (parsed?.usage) usage = parsed.usage;
+          if (parsed?.model && !modelUsed) modelUsed = parsed.model;
+        } catch { /* partial chunk; will be re-tried next loop */ }
+      }
     }
     res.end();
+    logUsage({
+      userId: body.userId,
+      chatId: body.chatId,
+      projectId: body.projectId,
+      model: modelUsed || AZURE_OPENAI_DEPLOYMENT,
+      promptTokens: usage?.prompt_tokens,
+      completionTokens: usage?.completion_tokens,
+      status: 'ok',
+      ms: Date.now() - startMs,
+    });
   } catch (e) {
     try { res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`); } catch { /* client gone */ }
     res.end();
+    logUsage({
+      userId: body.userId,
+      chatId: body.chatId,
+      projectId: body.projectId,
+      model: modelUsed || AZURE_OPENAI_DEPLOYMENT,
+      promptTokens: usage?.prompt_tokens,
+      completionTokens: usage?.completion_tokens,
+      status: 'error',
+      ms: Date.now() - startMs,
+    });
   }
 }
