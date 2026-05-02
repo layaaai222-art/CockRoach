@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, MessageSquare, Brain, FileText, Inbox, Pencil, Check, Archive } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Brain, FileText, Inbox, Pencil, Check, Archive, Sparkles, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { useProjects } from '../hooks/useProjects';
 import { cn } from '../lib/utils';
@@ -10,12 +10,14 @@ import ChatsTab from './projects/ChatsTab';
 import DecisionsTab from './projects/DecisionsTab';
 import ArtifactsTab from './projects/ArtifactsTab';
 import InboxTab from './projects/InboxTab';
+import { FRAMEWORK_CATALOG, type FrameworkId } from '../lib/kb-framework-loader';
 
 interface Props {
   projectId: string;
   userId: string;
   onBack: () => void;
   onOpenChat: (chatId: string) => void;
+  onRunFramework?: (id: FrameworkId, projectId: string) => void;
 }
 
 type Tab = 'chats' | 'decisions' | 'artifacts' | 'inbox';
@@ -204,7 +206,60 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function ProjectDetail({ projectId, userId, onBack, onOpenChat }: Props) {
+function RunFrameworkBar({ onRun }: { onRun: (id: FrameworkId) => void }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [open]);
+
+  return (
+    <div className="layaa-card bg-card/30 border-border p-3 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Sparkles size={13} className="text-primary" />
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-foreground">Run a framework on this project</p>
+          <p className="text-[10px] text-muted-foreground">Hormozi · Maurya · Christensen · Ellis · Brunson · Blank · Isenberg · Holmes · Dunford</p>
+        </div>
+      </div>
+      <div className="relative" ref={ref}>
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-primary border border-primary/40 hover:bg-primary/10 transition-all rounded-sm"
+        >
+          Pick framework
+          <ChevronDown size={11} className={cn('transition-transform', open && 'rotate-180')} />
+        </button>
+        {open && (
+          <div className="absolute right-0 top-full mt-1 w-[360px] max-h-[420px] overflow-y-auto bg-popover border border-border rounded-sm shadow-lg z-30">
+            {FRAMEWORK_CATALOG.map(f => (
+              <button
+                key={f.id}
+                onClick={() => { onRun(f.id); setOpen(false); }}
+                className="w-full text-left px-3 py-2.5 hover:bg-surface-mid border-b border-border/30 last:border-b-0 transition-colors"
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[12px] font-bold text-foreground">{f.name}</span>
+                  <span className="text-[10px] text-muted-foreground italic shrink-0">{f.origin}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{f.oneLine}</p>
+                <p className="text-[10px] text-primary/70 mt-1">Best for: {f.bestFor.join(' · ')}</p>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function ProjectDetail({ projectId, userId, onBack, onOpenChat, onRunFramework }: Props) {
   const { byId, update, archive } = useProjects({ userId });
   const project = byId(projectId);
   const [activeTab, setActiveTab] = React.useState<Tab>('chats');
@@ -256,6 +311,10 @@ export default function ProjectDetail({ projectId, userId, onBack, onOpenChat }:
           }
         }}
       />
+
+      {onRunFramework && (
+        <RunFrameworkBar onRun={(id) => onRunFramework(id, project.id)} />
+      )}
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-border/40 -mx-1">

@@ -66,6 +66,9 @@ import { useProjects } from './hooks/useProjects';
 import { useDecisions } from './hooks/useDecisions';
 import { formatProjectContext } from './lib/project-context';
 import type { DecisionCategory } from './lib/types';
+import { FRAMEWORK_CATALOG, type FrameworkId } from './lib/kb-framework-loader';
+import RevisitDueBanner from './components/RevisitDueBanner';
+import FounderFitModal from './components/FounderFitModal';
 
 // Map the active working mode → default decision category. Pre-fills the
 // form when the user clicks "Log decision" from the chat header.
@@ -189,6 +192,11 @@ export default function App() {
   const [currentPage, setCurrentPage] = React.useState<'chat' | 'settings' | 'research' | 'memory' | 'projects'>('chat');
   const [activeProjectId, setActiveProjectId] = React.useState<string | null>(null);
   const [logDecisionOpen, setLogDecisionOpen] = React.useState(false);
+  // When the user clicks "Run framework" on a project, this is set to the
+  // framework id; the next chat turn injects the framework KB and then this
+  // is cleared so subsequent turns don't keep re-injecting.
+  const [activeFrameworkId, setActiveFrameworkId] = React.useState<FrameworkId | null>(null);
+  const [founderFitOpen, setFounderFitOpen] = React.useState(false);
 
   // Project context for the system prompt — when activeProjectId is set, the
   // agent gets a [PROJECT CONTEXT] block listing the project description and
@@ -578,7 +586,10 @@ export default function App() {
         kbToggles, memoryItems, activeMode,
         userName: currentUser.name, isBrutalHonesty,
         projectContext,
+        activeFrameworkId,
       });
+      // Clear after injection — frameworks are scoped to one turn.
+      if (activeFrameworkId) setActiveFrameworkId(null);
 
       const urlCtx = buildUrlContext(urlPreviews);
       const apiMessages = [
@@ -810,6 +821,19 @@ export default function App() {
           defaultCategory={modeToDecisionCategory(activeMode)}
           onClose={() => setLogDecisionOpen(false)}
           onLog={logProjectDecision}
+        />
+      )}
+
+      {/* Founder-Fit assessment — launched from sidebar. Persists answers
+          as user-scope memory_items (category=founder_fit) so future idea
+          generation/validation is tailored to this founder. */}
+      {currentUser && (
+        <FounderFitModal
+          open={founderFitOpen}
+          onClose={() => setFounderFitOpen(false)}
+          userId={currentUser.id}
+          userName={currentUser.name}
+          onSaved={() => { if (currentUser) loadMemoryItems(currentUser.id); }}
         />
       )}
 
@@ -1143,6 +1167,18 @@ export default function App() {
           </div>
         </header>
 
+        {/* Cross-project revisit-due banner — shows decisions whose
+            revisit_at has passed; click jumps into the project. */}
+        {currentUser && (
+          <RevisitDueBanner
+            userId={currentUser.id}
+            onOpenProject={(pid) => {
+              setActiveProjectId(pid);
+              setCurrentPage('projects');
+            }}
+          />
+        )}
+
         {/* Mobile full-screen search overlay */}
         <AnimatePresence>
           {isSearchOpen && (
@@ -1281,6 +1317,13 @@ export default function App() {
                 onOpenChat={(chatId) => {
                   setActiveChatId(chatId);
                   setCurrentPage('chat');
+                }}
+                onRunFramework={(id, pid) => {
+                  setActiveProjectId(pid);
+                  setActiveFrameworkId(id);
+                  setActiveChatId(null);
+                  setCurrentPage('chat');
+                  toast.success(`Framework primed — type your project context to run it`);
                 }}
               />
             ) : (
@@ -1535,8 +1578,27 @@ export default function App() {
                       </AnimatePresence>
                     </div>
                   )}
+                  {activeFrameworkId && (() => {
+                    const f = FRAMEWORK_CATALOG.find(x => x.id === activeFrameworkId);
+                    if (!f) return null;
+                    return (
+                      <div className="mx-3 mt-3 sm:mx-5 sm:mt-4 flex items-center justify-between gap-2 px-2.5 py-1.5 bg-primary/10 border border-primary/30 rounded-lg">
+                        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-primary">
+                          <span>Framework primed:</span>
+                          <span className="normal-case tracking-normal">{f.name} ({f.origin})</span>
+                        </div>
+                        <button
+                          onClick={() => setActiveFrameworkId(null)}
+                          className="text-primary/70 hover:text-primary transition-colors"
+                          aria-label="Clear framework"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    );
+                  })()}
                   <textarea
-                    placeholder="Brief CockRoach..."
+                    placeholder={activeFrameworkId ? "Describe the project context — Cockroach will run the framework on it..." : "Brief CockRoach..."}
                     value={input}
                     onChange={handleInputChange}
                     onKeyDown={(e) => {
@@ -1690,6 +1752,25 @@ export default function App() {
               <p className="text-[10px] text-muted-foreground mt-0.5">{messages.length} messages</p>
             </div>
           )}
+
+          {/* Founder-Fit launcher */}
+          <div className="px-4 pt-4 pb-3 border-b border-border/50">
+            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Founder Profile</p>
+            <button
+              onClick={() => setFounderFitOpen(true)}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 bg-primary/5 border border-primary/20 hover:bg-primary/10 transition-all rounded-xl text-left group"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[12px] font-bold text-primary">Founder Fit</span>
+              </div>
+              <span className="text-[10px] text-muted-foreground group-hover:text-foreground">
+                {memoryItems.some(m => m.category === 'founder_fit') ? 'Update' : 'Run'}
+              </span>
+            </button>
+            <p className="text-[10px] text-muted-foreground mt-1.5 leading-snug">
+              6 questions → tailors idea generation & validation to you.
+            </p>
+          </div>
 
           {/* Memory items */}
           <div className="px-4 pt-4">
