@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAppStore } from './store';
-import { cn } from './lib/utils';
+import { cn, copyToClipboard } from './lib/utils';
 import {
   Search,
   Plus,
@@ -911,7 +911,7 @@ export default function App() {
   };
 
   if (authChecking) {
-    return <div className="h-screen w-full bg-background flex items-center justify-center">
+    return <div className="h-[100dvh] w-full bg-background flex items-center justify-center">
        <Bot size={34} className="text-primary animate-pulse" />
     </div>;
   }
@@ -921,7 +921,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-full bg-background overflow-hidden selection:bg-primary/20 selection:text-primary dark">
+    <div className="flex h-[100dvh] w-full bg-background overflow-hidden selection:bg-primary/20 selection:text-primary dark">
       <Toaster position="top-right" theme="dark" richColors />
 
       {/* Project decision-log modal — opened from chat header. Mode-aware
@@ -1400,7 +1400,7 @@ export default function App() {
               <Link size={14} className="text-primary shrink-0" />
               <p className="text-[12px] text-muted-foreground flex-1 font-mono truncate">{shareLink}</p>
               <button
-                onClick={() => { navigator.clipboard.writeText(shareLink); toast.success('Copied!'); }}
+                onClick={async () => { if (await copyToClipboard(shareLink)) toast.success('Copied!'); else toast.error('Copy failed — long-press the link to copy manually'); }}
                 className="text-[10px] font-bold text-primary hover:brightness-110 uppercase tracking-widest shrink-0"
               >
                 Copy
@@ -1550,7 +1550,7 @@ export default function App() {
                             {/* Action bar — CSS group-hover for reliable click */}
                             <div className="flex items-center gap-0.5 mt-1.5 pl-1 transition-opacity duration-150 opacity-0 group-hover/msg:opacity-100 pointer-events-none group-hover/msg:pointer-events-auto">
                               {([
-                                { icon: Copy, title: 'Copy', onClick: () => { navigator.clipboard.writeText(msg.content); toast.success('Copied'); } },
+                                { icon: Copy, title: 'Copy', onClick: async () => { if (await copyToClipboard(msg.content)) toast.success('Copied'); else toast.error('Copy failed'); } },
                                 { icon: ThumbsUp, title: 'Good', onClick: () => setMessageRatings(r => ({ ...r, [msg.id || String(i)]: 'up' })), active: messageRatings[msg.id || String(i)] === 'up' },
                                 { icon: ThumbsDown, title: 'Bad', onClick: () => setMessageRatings(r => ({ ...r, [msg.id || String(i)]: 'down' })), active: messageRatings[msg.id || String(i)] === 'down' },
                                 { icon: FileDown, title: 'Open as document', onClick: () => handleOpenAsDocument(msg.content) },
@@ -1594,7 +1594,7 @@ export default function App() {
                             </motion.div>
                             {/* User action bar — CSS group-hover */}
                             <div className="flex items-center gap-0.5 mt-1.5 pr-1 justify-end transition-opacity duration-150 opacity-0 group-hover/msg:opacity-100 pointer-events-none group-hover/msg:pointer-events-auto">
-                              <button onClick={() => { navigator.clipboard.writeText(msg.rawText || msg.content); toast.success('Copied'); }}
+                              <button onClick={async () => { if (await copyToClipboard(msg.rawText || msg.content)) toast.success('Copied'); else toast.error('Copy failed'); }}
                                 title="Copy" className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-muted-foreground hover:bg-white/5 transition-all"><Copy size={13} /></button>
                               <button onClick={() => handleEditUserMessage(msg)}
                                 title="Edit & resend" className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-muted-foreground hover:bg-white/5 transition-all"><Pencil size={13} /></button>

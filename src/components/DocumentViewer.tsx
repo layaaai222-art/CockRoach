@@ -48,7 +48,7 @@ export default function DocumentViewer({ content, onClose, onExported }: Documen
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => { navigator.clipboard.writeText(content); toast.success('Copied!'); }}
+            onClick={async () => { const { copyToClipboard } = await import('../lib/utils'); if (await copyToClipboard(content)) toast.success('Copied!'); else toast.error('Copy failed'); }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-mid border border-border hover:border-primary/40 rounded-lg text-[11px] font-bold text-muted-foreground hover:text-foreground transition-all uppercase tracking-wider"
           >
             <Copy size={11} />

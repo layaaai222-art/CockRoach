@@ -3,7 +3,7 @@
 > **Working file for the build team.** Updated continuously as work
 > progresses. Read this first to know where the project stands.
 
-**Last updated:** 2026-05-03 (Phase 1.5 — auto-routing + bundle split + onboarding + latent features)
+**Last updated:** 2026-05-03 (Phase 2 — bug bash + perf + security + cost monitoring)
 
 ---
 
@@ -726,6 +726,83 @@ launch, freeze all non-essential testing and shift to mock-mode for QA.
   (small Frameworks Quick Actions section) → push commit, then
   Day 7 (Discovery enhancements: ideas table + catalog,
   AI_FOUNDER_FIT assessment, Idea of the Day).
+
+---
+
+### 2026-05-03 — Phase 2: bug bash + perf + security + cost monitoring
+- **Approach.** Spawned 3 parallel Explore agents (hooks/state, security,
+  perf). Each returned a prioritized issue list. I fixed the
+  CRITICAL/HIGH items in batches; documented MEDIUM/LOW for follow-up.
+- **Bug fixes (5 confirmed bugs).**
+  - `/api/route-mode` had no client-side timeout → UI freeze risk.
+    Added 6s AbortController on the client; server still has its 4s.
+  - FounderFitModal soft-replace was delete-then-insert → data loss
+    risk on network blip. Flipped to insert-then-delete-by-cutoff so
+    new rows can never be lost.
+  - Search debouncer Promise.all swallowed Supabase errors silently;
+    no cancellation flag for stale queries. Both fixed.
+  - Cold-start: `loadChatHistory` + `loadSystemPrompt` +
+    `loadMemoryItems` were sequential awaits → 200-400 ms penalty.
+    Now `Promise.all`.
+  - Quick-add memory: error.message wasn't surfaced; null-check
+    missing on inserted row. Now toasts the actual reason.
+  - Two `catch (e: any)` sites converted to `catch (e: unknown)`
+    with safe `Error` narrowing.
+- **Performance — biggest win of the session.**
+  - Mermaid + DOMPurify: was top-level eager imports. Now lazy-loaded
+    inside `loadMermaid()` on first MermaidDiagram mount.
+  - file-export.ts: jsPDF, docx, xlsx, pptxgenjs all switched to
+    dynamic imports inside their respective download* functions.
+    `parseInlineRuns` moved inside `downloadDOCX` (uses `TextRun`).
+  - Result: **main JS bundle 994 KB gz → 312 KB gz (-68%)**. Heavy
+    libs are now ~120-160 KB gz chunks fetched only when used.
+- **Security tightening.**
+  - DOMPurify config tightened: `FORBID_ATTR` adds `href`, `xlink:href`;
+    `ALLOWED_URI_REGEXP` blocks `javascript:` / `data:` schemes.
+  - `api/generate-pulse.js` rate-limit cleanup loop matched to chat.js
+    pattern. In-memory `hits` map can no longer grow unbounded.
+- **Cost monitoring.**
+  - New `api_usage_log` table (migration applied via Supabase MCP).
+    Columns: user_id, chat_id, project_id, endpoint, model, prompt /
+    completion / total tokens, estimated_cost_usd, status, ms,
+    created_at.
+  - `/api/chat` now parses SSE chunks server-side to extract the
+    final `usage` block (already enabled via `stream_options.
+    include_usage`). Estimates cost at ~$0.0025 / 1k input tokens
+    + $0.01 / 1k output. Fire-and-forget; failures swallowed so
+    cost-tracking never breaks chat.
+  - `useAzureChat` accepts `userId` / `chatId` / `projectId`;
+    App.tsx passes from active state on every send.
+- **Cross-browser / PWA polish.**
+  - `copyToClipboard()` helper in lib/utils.ts: tries
+    `navigator.clipboard.writeText`, falls back to `<textarea>` +
+    `execCommand('copy')`. iOS Safari + insecure-context safe.
+    Replaced 4 unsafe inline copy calls.
+  - `h-screen` → `h-[100dvh]` in App entry, ProfileSelector,
+    ErrorBoundary. Fixes iOS URL-bar clipping.
+- **Verified.** typecheck ✓, lint 0 errors (43 pre-existing `any`
+  warnings), build ✓.
+- **Committed + pushed:** `822d593` (bug + perf + cost + security)
+  on top of Phase 1.5 commits.
+- **Documented for follow-up (NOT fixed):**
+  - RLS overhaul → Phase 3 (auth migration). Currently disabled by
+    design.
+  - Share token entropy → UUIDv4 is acceptable for V1; tighten later.
+  - Prompt injection vector via project metadata → accepted V1 risk;
+    closed-loop mode validation mitigates.
+  - 2 npm `uuid` vulns (transitive via mermaid) → breaking-change
+    upgrade, defer.
+  - Chat history virtualization → bigger refactor; defer.
+- **Phase 2 launch-plan checklist:**
+  - ✅ Daily bug bash (this audit)
+  - ✅ Cost monitoring infra (new table + log path)
+  - ✅ Performance (bundle dropped 68%; cold-start parallelized)
+  - ✅ Final security review (RLS deferred to Phase 3, the rest hardened)
+  - 🚧 Internal team test + beta cohort — Abhi action; agent can't drive
+  - 🚧 Mobile PWA testing on real devices — Abhi action
+- **Next:** Phase 3 of the launch plan — auth (Supabase Auth + RLS
+  enable + per-user policies), Stripe billing, transactional email
+  (Resend), marketing landing page, privacy/ToS, monitoring dashboards.
 
 ---
 

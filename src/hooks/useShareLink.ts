@@ -59,8 +59,15 @@ export function useShareLink({
 
     const link = `${window.location.origin}${window.location.pathname}?shared=${token}`;
     setShareLink(link);
-    await navigator.clipboard.writeText(link).catch(() => { /* clipboard unavailable */ });
-    toast.success(`Share link copied — valid for ${SHARE_WINDOW_DAYS} days.`);
+    const { copyToClipboard } = await import('../lib/utils');
+    const copied = await copyToClipboard(link);
+    if (copied) {
+      toast.success(`Share link copied — valid for ${SHARE_WINDOW_DAYS} days.`);
+    } else {
+      // iOS / insecure context — show the modal/dialog still so user can
+      // long-press and copy manually. The setShareLink above handles UI.
+      toast(`Share link ready — long-press to copy. Valid for ${SHARE_WINDOW_DAYS} days.`);
+    }
   }, [activeChatId]);
 
   const revokeLink = React.useCallback(async () => {

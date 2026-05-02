@@ -117,7 +117,7 @@ export default function ProfileSelector({ onSelect }: { onSelect: () => void }) 
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#0c0c0c] flex flex-col items-center justify-center p-4 sm:p-8 dark selection:bg-primary/20">
+    <div className="min-h-[100dvh] w-full bg-[#0c0c0c] flex flex-col items-center justify-center p-4 sm:p-8 dark selection:bg-primary/20">
 
       {/* Brand */}
       <motion.div
