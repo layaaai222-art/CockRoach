@@ -201,6 +201,7 @@ the product + a "Start free" CTA into the app.
 **Phase 1 Day 1 → ✅ DONE** (legacy deletes; documentation.md + ARCHITECTURE.md updates).
 **Phase 1 Day 2 (Project spine — data layer) → ✅ DONE** 2026-04-30.
 **Phase 1 Day 3 (Project spine — UI) → ✅ DONE** 2026-04-30 (same-day; we ran ahead).
+**Phase 1 Day 4 (Operator modes) → ✅ DONE** 2026-04-30 (still running ahead).
 
 **Day 2 progress (today, 2026-04-30):**
 - ✅ Supabase MCP reconfigured to hosted HTTP + OAuth (project-scope `.mcp.json`).
@@ -463,6 +464,66 @@ launch, freeze all non-essential testing and shift to mock-mode for QA.
   search (Day 5).
 - **Next:** Day 4 (operator modes — PRICING, GO_TO_MARKET, FUNDRAISING,
   HIRING_AND_EQUITY) + mode reorder + Discovery submenu.
+
+### 2026-04-30 — Phase 1 Day 4: Operator modes + reorder
+- **Research lock-in.** Pulled 2026 data on each topic to make the KBs
+  decision-ready, not generic:
+  - PRICING: Van Westendorp PSM still gold standard; anchor Pro tier
+    near $29/seat; max 3-4 tiers (>4 cuts conversion ~30%); 1% pricing
+    improvement = 11% op-profit lift; tiered base + usage overage is
+    2026 default; value metrics correlate with 30% growth + 15-26%
+    retention lift.
+  - GTM: Hybrid PLG+SLG is default $5K-$50K ACV (2x revenue growth vs
+    pure-SLG); pure PLG below $5K, pure SLG above $50K with multi-
+    stakeholder buys. Bullseye framework for channel selection.
+  - FUNDRAISING: SAFEs = 90% of pre-seed, 64% of seed (Q1 2025); SAFE
+    stacks with conflicting MFNs cause retroactive cap-table chaos;
+    inverted cap tables (investors > founders) = uninvestable; founder
+    ownership red zones documented per stage.
+  - HIRING: FAST framework (3 stages × 3 advisor levels); founders/
+    employees 4yr/1yr-cliff non-negotiable; advisors 2yr/3mo-cliff;
+    10-20% option pool; first 10 employees collectively ~10% equity.
+- **Shipped (single commit):**
+  - 4 new mode KBs in `kb/modes/`:
+    - `PRICING.md` — model/structure/levels/packaging decisions; van
+      Westendorp + Gabor-Granger scripts; 7-row model selection table;
+      tiered packaging traps; produces pricing-page copy + survey +
+      sensitivity model artifacts.
+    - `GO_TO_MARKET.md` — ACV-based motion framework; full Bullseye
+      19-channel taxonomy; CAC math non-negotiables; first-100-customer
+      Lenny's Newsletter pattern; produces email sequences + cold call
+      scripts + landing page copy + CAC sensitivity model.
+    - `FUNDRAISING.md` — raise-or-not test; SAFE vs priced with hard
+      rules ("max 2 SAFE rounds before priced"; "no MFNs"); 2026 stage
+      benchmarks for raise size + dilution; Sequoia-style 12-slide
+      deck spec; term-sheet red flags table with push-back language;
+      produces deck + cap table + investor list + cold email artifacts.
+    - `HIRING_AND_EQUITY.md` — first-5 sequencing per stage; full
+      employee equity bands by hire # × stage × seniority; FAST
+      advisor framework table; vesting architecture (4y/1y cliff;
+      double-trigger acceleration; refresh grants; 83(b) elections);
+      sourcing flow with red flags; produces JD + offer template +
+      cap table impact + reference script.
+  - `kb-mode-loader.ts` — added 4 imports + 4 entries (now 13 mode KBs
+    + always-on Skills KB).
+  - `App.tsx` — APP_MODES restructured with `group` field
+    (`core | operator | discovery | creative`); 4 new modes added
+    (PRICING, GO_TO_MARKET, FUNDRAISING, HIRING_AND_EQUITY); icons
+    Tag, Target, PiggyBank, UserPlus added.
+  - **Mode picker UI** — now renders grouped sections with subtle
+    headers (Core / Build the business / Find an idea / Creative
+    tools). Discovery modes (IDEA_GENERATION, IDEA_VALIDATION) moved
+    out of top-of-list — they're for the secondary "no idea yet"
+    entry path. Operator modes promoted to the prominent middle
+    section. IMAGE_PROMPTING moved to Creative.
+- **Verified:** typecheck ✓, lint 0 errors (42 pre-existing warnings).
+- **Skipped (deferred to Day 5):** Brand kit MVP (per-org logo upload
+  + accent color applied to exports) — simpler with auth + tier
+  context; postpone to Phase 3. Watermark on free-tier exports —
+  same; depends on auth/tier.
+- **Next:** Day 5 (specialist modes — CUSTOMER_DISCOVERY,
+  LEGAL_AND_OPS, PIVOT_OR_PERSEVERE) + decision-log UX polish in
+  chat.
 
 ---
 

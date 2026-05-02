@@ -10,6 +10,10 @@ import BUSINESS_MODEL_KB from '../../kb/modes/BUSINESS_MODEL.md?raw';
 import POSITIONING_KB from '../../kb/modes/POSITIONING.md?raw';
 import IMAGE_PROMPTING_KB from '../../kb/modes/IMAGE_PROMPTING.md?raw';
 import EXECUTION_KB from '../../kb/modes/EXECUTION.md?raw';
+import PRICING_KB from '../../kb/modes/PRICING.md?raw';
+import GO_TO_MARKET_KB from '../../kb/modes/GO_TO_MARKET.md?raw';
+import FUNDRAISING_KB from '../../kb/modes/FUNDRAISING.md?raw';
+import HIRING_AND_EQUITY_KB from '../../kb/modes/HIRING_AND_EQUITY.md?raw';
 import SKILLS_KB_TEXT from '../../kb/SKILLS.md?raw';
 
 export const SKILLS_KB = SKILLS_KB_TEXT;
@@ -22,8 +26,12 @@ export const MODE_KBS: Record<string, string> = {
   THINKING: THINKING_KB,
   BUSINESS_MODEL: BUSINESS_MODEL_KB,
   POSITIONING: POSITIONING_KB,
-  IMAGE_PROMPTING: IMAGE_PROMPTING_KB,
+  PRICING: PRICING_KB,
+  GO_TO_MARKET: GO_TO_MARKET_KB,
   EXECUTION: EXECUTION_KB,
+  FUNDRAISING: FUNDRAISING_KB,
+  HIRING_AND_EQUITY: HIRING_AND_EQUITY_KB,
+  IMAGE_PROMPTING: IMAGE_PROMPTING_KB,
 };
 
 export function getModeKB(activeMode: string): string | null {

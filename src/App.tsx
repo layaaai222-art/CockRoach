@@ -34,6 +34,10 @@ import {
   FileDown,
   Globe,
   Menu,
+  Tag,
+  Target,
+  PiggyBank,
+  UserPlus,
 } from 'lucide-react';
 import DocumentViewer from './components/DocumentViewer';
 import { motion, AnimatePresence } from 'motion/react';
@@ -58,17 +62,48 @@ import { Toaster, toast } from 'sonner';
 import { buildSystemPrompt } from './lib/system-prompt-builder';
 import { COCKROACH_DEFAULT_SYSTEM_PROMPT } from './lib/kb-constants';
 
-const APP_MODES = [
-  { id: 'GENERAL', icon: Bot, label: 'General Chat' },
-  { id: 'IDEA_GENERATION', icon: Lightbulb, label: 'Generate Ideas' },
-  { id: 'IDEA_VALIDATION', icon: ShieldCheck, label: 'Validate Idea' },
-  { id: 'DEEP_RESEARCH', icon: Search, label: 'Research Market' },
-  { id: 'THINKING', icon: Brain, label: 'Think Deeply' },
-  { id: 'BUSINESS_MODEL', icon: Briefcase, label: 'Business Model' },
-  { id: 'POSITIONING', icon: Rocket, label: 'Brand & Positioning' },
-  { id: 'IMAGE_PROMPTING', icon: ImageIcon, label: 'Create Visual Prompt' },
-  { id: 'EXECUTION', icon: CheckSquare, label: 'Build Plan' },
+// Modes are grouped by where they sit in the founder journey. Order
+// within each group reflects typical use-frequency. Operator group
+// surfaces first (most users have an idea already); Discovery is for
+// the secondary "I don't have an idea yet" entry path.
+type ModeGroup = 'core' | 'operator' | 'discovery' | 'creative';
+
+interface AppMode {
+  id: string;
+  icon: typeof Bot;
+  label: string;
+  group: ModeGroup;
+}
+
+const APP_MODES: AppMode[] = [
+  // Core — always-relevant
+  { id: 'GENERAL',           icon: Bot,         label: 'General Chat',         group: 'core' },
+  { id: 'THINKING',          icon: Brain,       label: 'Think Deeply',         group: 'core' },
+  { id: 'DEEP_RESEARCH',     icon: Search,      label: 'Research Market',      group: 'core' },
+
+  // Operator — post-idea-chosen (primary lane)
+  { id: 'BUSINESS_MODEL',    icon: Briefcase,   label: 'Business Model',       group: 'operator' },
+  { id: 'POSITIONING',       icon: Rocket,      label: 'Brand & Positioning',  group: 'operator' },
+  { id: 'PRICING',           icon: Tag,         label: 'Pricing Strategy',     group: 'operator' },
+  { id: 'GO_TO_MARKET',      icon: Target,      label: 'Go-to-Market',         group: 'operator' },
+  { id: 'EXECUTION',         icon: CheckSquare, label: 'Build Plan',           group: 'operator' },
+  { id: 'FUNDRAISING',       icon: PiggyBank,   label: 'Fundraising',          group: 'operator' },
+  { id: 'HIRING_AND_EQUITY', icon: UserPlus,    label: 'Hiring & Equity',      group: 'operator' },
+
+  // Discovery — pre-idea (secondary lane)
+  { id: 'IDEA_GENERATION',   icon: Lightbulb,   label: 'Generate Ideas',       group: 'discovery' },
+  { id: 'IDEA_VALIDATION',   icon: ShieldCheck, label: 'Validate Idea',        group: 'discovery' },
+
+  // Creative — adjunct utilities
+  { id: 'IMAGE_PROMPTING',   icon: ImageIcon,   label: 'Create Visual Prompt', group: 'creative' },
 ];
+
+const MODE_GROUP_LABELS: Record<ModeGroup, string> = {
+  core:      'Core',
+  operator:  'Build the business',
+  discovery: 'Find an idea',
+  creative:  'Creative tools',
+};
 
 const MD_COMPONENTS: React.ComponentProps<typeof ReactMarkdown>['components'] = {
   h1: ({children}) => <h1 className="text-xl font-bold text-foreground mt-4 mb-2 first:mt-0">{children}</h1>,
@@ -1471,18 +1506,29 @@ export default function App() {
                        <div className="relative">
                           {isModeSelectOpen && (
                               <div className="absolute bottom-full mb-4 left-0 w-64 bg-background/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_16px_40px_-12px_rgba(0,0,0,0.8)] z-50 animate-in fade-in zoom-in-95 origin-bottom-left">
-                                  <div className="max-h-[320px] overflow-y-auto layaa-scroll p-2 space-y-0.5">
-                                      {APP_MODES.map(mode => (
-                                          <button
-                                              key={mode.id}
-                                              onClick={() => { setActiveMode(mode.id); setIsModeSelectOpen(false); }}
-                                              className={cn("w-full flex items-center gap-3 px-3 py-2.5 text-[13px] font-medium text-left rounded-xl transition-all", activeMode === mode.id ? "text-primary bg-primary/10 shadow-inner" : "text-foreground hover:bg-white/5")}
-                                          >
-                                              <mode.icon size={16} className={activeMode === mode.id ? "text-primary" : "text-muted-foreground"} />
-                                              <span className="truncate tracking-wide">{mode.label}</span>
-                                              {activeMode === mode.id && <Pin size={12} className="ml-auto opacity-50" />}
-                                          </button>
-                                      ))}
+                                  <div className="max-h-[400px] overflow-y-auto layaa-scroll p-2 space-y-1">
+                                      {(['core', 'operator', 'discovery', 'creative'] as const).map(group => {
+                                        const modesInGroup = APP_MODES.filter(m => m.group === group);
+                                        if (modesInGroup.length === 0) return null;
+                                        return (
+                                          <div key={group} className="space-y-0.5">
+                                            <p className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-[0.2em] px-3 pt-2 pb-1">
+                                              {MODE_GROUP_LABELS[group]}
+                                            </p>
+                                            {modesInGroup.map(mode => (
+                                              <button
+                                                key={mode.id}
+                                                onClick={() => { setActiveMode(mode.id); setIsModeSelectOpen(false); }}
+                                                className={cn("w-full flex items-center gap-3 px-3 py-2 text-[13px] font-medium text-left rounded-xl transition-all", activeMode === mode.id ? "text-primary bg-primary/10 shadow-inner" : "text-foreground hover:bg-white/5")}
+                                              >
+                                                <mode.icon size={15} className={activeMode === mode.id ? "text-primary" : "text-muted-foreground"} />
+                                                <span className="truncate tracking-wide">{mode.label}</span>
+                                                {activeMode === mode.id && <Pin size={11} className="ml-auto opacity-50" />}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        );
+                                      })}
                                   </div>
                               </div>
                           )}

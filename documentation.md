@@ -783,21 +783,36 @@ persistent venture memory."
 - Pulse widget visualization (waits for first pulse logs)
 - Cross-project search
 
-### 🚧 Phase 2 — Operator modes
+### Phase 2 — Operator modes ✅ shipped 2026-04-30
 
 The four post-idea modes that cover the highest-frequency founder pain
-points after commitment:
+points after commitment. All grounded in 2026 market data, not generic
+LLM advice.
 
-- `PRICING` — pricing model + tiers + sensitivity tables + page copy
-- `GO_TO_MARKET` — PLG vs sales-led + channel selection + first-100
-  playbook
-- `FUNDRAISING` — raise/bootstrap call + deck + investor list + dilution
-  math + term-sheet basics
-- `HIRING_AND_EQUITY` — first 5 hires + equity bands + sourcing +
-  screening rubrics
+- ✅ `PRICING` — model selection (subscription / usage / hybrid /
+  take-rate / value-based), 3-4 tier sweet spot, van Westendorp PSM
+  scripts, anchoring framework, packaging traps. Produces pricing-page
+  copy + Van Westendorp survey + sensitivity model artifacts.
+- ✅ `GO_TO_MARKET` — ACV-based motion framework (PLG / hybrid / SLG),
+  full Bullseye 19-channel taxonomy, CAC payback non-negotiables,
+  first-100-customer Lenny's pattern. Produces email sequences + cold
+  call scripts + landing page copy + CAC sensitivity model.
+- ✅ `FUNDRAISING` — raise-or-not test, SAFE vs priced (with hard
+  rules to avoid SAFE-stack chaos), 2026 stage benchmarks, founder
+  ownership red zones, Sequoia-style 12-slide deck spec, term-sheet
+  red flags + push-back language. Produces deck + cap table + investor
+  list + cold email artifacts.
+- ✅ `HIRING_AND_EQUITY` — first-5 sequencing per stage, full employee
+  equity bands by hire # × stage × seniority, FAST advisor framework,
+  vesting architecture (4y/1y cliff non-negotiable + double-trigger
+  acceleration + refresh grants + 83(b)). Produces JD + offer
+  template + cap table impact + reference script.
 
-Each mode = one ~150-line KB + import in `kb-mode-loader.ts` + entry
-in `APP_MODES`. **~4 hours total.**
+Mode picker UI now groups modes into four sections with subtle
+headers: **Core** (General / Think / Research) · **Build the business**
+(7 operator modes) · **Find an idea** (discovery) · **Creative tools**
+(image prompting). Operator modes promoted to the prominent middle
+section; discovery moved to its own group as the secondary entry path.
 
 ### 🚧 Phase 3 — Decision log + artifact catalog
 
