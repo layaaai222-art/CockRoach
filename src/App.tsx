@@ -68,6 +68,7 @@ import { useDecisions } from './hooks/useDecisions';
 import { formatProjectContext } from './lib/project-context';
 import type { DecisionCategory } from './lib/types';
 import { FRAMEWORK_CATALOG, type FrameworkId } from './lib/kb-framework-loader';
+import { preloadModeKB } from './lib/kb-mode-loader';
 import RevisitDueBanner from './components/RevisitDueBanner';
 import FounderFitModal from './components/FounderFitModal';
 import CapabilityChips from './components/CapabilityChips';
@@ -638,7 +639,7 @@ export default function App() {
       // capability chip for this turn even though it's cleared after send.
       const frameworkUsed = activeFrameworkId;
 
-      const builtPrompt = buildSystemPrompt({
+      const builtPrompt = await buildSystemPrompt({
         systemPromptBase: systemPrompt || COCKROACH_DEFAULT_SYSTEM_PROMPT,
         kbToggles, memoryItems, activeMode: resolvedMode,
         userName: currentUser.name, isBrutalHonesty,
@@ -1730,7 +1731,7 @@ export default function App() {
                                               {modesInGroup.map(mode => (
                                                 <button
                                                   key={mode.id}
-                                                  onClick={() => { setActiveMode(mode.id); setIsModeSelectOpen(false); setModeSearch(''); if (mode.id !== 'AUTO') setRoutedMode(null); }}
+                                                  onClick={() => { setActiveMode(mode.id); setIsModeSelectOpen(false); setModeSearch(''); if (mode.id !== 'AUTO') { setRoutedMode(null); preloadModeKB(mode.id); } }}
                                                   className={cn("w-full flex items-start gap-3 px-3 py-2 text-[13px] font-medium text-left rounded-xl transition-all", activeMode === mode.id ? "text-primary bg-primary/10 shadow-inner" : "text-foreground hover:bg-white/5")}
                                                 >
                                                   <mode.icon size={15} className={cn('mt-0.5 shrink-0', activeMode === mode.id ? "text-primary" : "text-muted-foreground")} />

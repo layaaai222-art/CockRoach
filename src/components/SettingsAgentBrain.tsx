@@ -198,14 +198,23 @@ export default function SettingsAgentBrain() {
     toast.success('Memory cleared.');
   };
 
-  const assembledPreview = buildSystemPrompt({
-    systemPromptBase: localPrompt,
-    kbToggles,
-    memoryItems,
-    activeMode: 'IDEA_GENERATION',
-    userName: currentUser?.name || 'User',
-    isBrutalHonesty: false,
-  });
+  // System-prompt preview is computed async because mode/framework KBs
+  // are now lazy-loaded; we await the build and cache the string.
+  const [assembledPreview, setAssembledPreview] = React.useState<string>('');
+  React.useEffect(() => {
+    let cancelled = false;
+    buildSystemPrompt({
+      systemPromptBase: localPrompt,
+      kbToggles,
+      memoryItems,
+      activeMode: 'IDEA_GENERATION',
+      userName: currentUser?.name || 'User',
+      isBrutalHonesty: false,
+    }).then(prompt => {
+      if (!cancelled) setAssembledPreview(prompt);
+    });
+    return () => { cancelled = true; };
+  }, [localPrompt, kbToggles, memoryItems, currentUser?.name]);
 
   const KB_CONTENT: Record<string, string> = { kb01: KB_01, kb02: KB_02, kb03: KB_03, kb04: KB_04 };
   const enabledKBsSize = KB_META

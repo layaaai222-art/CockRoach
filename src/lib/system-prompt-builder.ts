@@ -1,6 +1,6 @@
 import { KB_01, KB_02, KB_03, KB_04 } from './kb-constants';
-import { getModeKB, SKILLS_KB } from './kb-mode-loader';
-import { getFrameworkKB, getFrameworkMeta, type FrameworkId } from './kb-framework-loader';
+import { loadModeKB, SKILLS_KB } from './kb-mode-loader';
+import { loadFrameworkKB, getFrameworkMeta, type FrameworkId } from './kb-framework-loader';
 
 export interface KBToggles {
   kb01: boolean;
@@ -24,7 +24,13 @@ export const DEFAULT_KB_TOGGLES: KBToggles = {
   kb04: true,
 };
 
-export function buildSystemPrompt(params: {
+/**
+ * Builds the system prompt. Now async because mode and framework KBs
+ * are lazy-loaded — the relevant chunks are fetched on first use, then
+ * cached in memory for the session. Existing call sites should `await`
+ * this function before sending the chat completion request.
+ */
+export async function buildSystemPrompt(params: {
   systemPromptBase: string;
   kbToggles: KBToggles;
   memoryItems: MemoryItem[];
@@ -33,7 +39,7 @@ export function buildSystemPrompt(params: {
   isBrutalHonesty: boolean;
   projectContext?: string | null;
   activeFrameworkId?: FrameworkId | null;
-}): string {
+}): Promise<string> {
   const { systemPromptBase, kbToggles, memoryItems, activeMode, userName, isBrutalHonesty, projectContext, activeFrameworkId } = params;
   const parts: string[] = [];
 
@@ -48,10 +54,13 @@ export function buildSystemPrompt(params: {
   // should never produce a half-finished deliverable when asked for a report.
   parts.push(`[SKILLS KB — Reports, Decks, Models, Charts]\n${SKILLS_KB}`);
 
-  // Mode-specific KB injected based on the active working mode. These are
-  // orthogonal to KB_01-04 (which are always-on foundations) — the mode KB
-  // tells Cockroach HOW to behave in this specific workflow.
-  const modeKB = getModeKB(activeMode);
+  // Mode and framework KBs are loaded in parallel; both are tiny chunks
+  // typically <3 KB so the round-trip is cheap on warm cache.
+  const [modeKB, frameworkKB] = await Promise.all([
+    loadModeKB(activeMode),
+    activeFrameworkId ? loadFrameworkKB(activeFrameworkId) : Promise.resolve(null),
+  ]);
+
   if (modeKB) {
     parts.push(`[MODE KB — ${activeMode}]\n${modeKB}`);
   }
@@ -60,12 +69,9 @@ export function buildSystemPrompt(params: {
     parts.push(`[PROJECT CONTEXT]\n${projectContext}\n[/PROJECT CONTEXT]`);
   }
 
-  // On-demand framework KB — injected when the user clicks "Run framework"
-  // on a project. Scoped to the next chat turn (UI clears it after send).
-  if (activeFrameworkId) {
-    const frameworkKB = getFrameworkKB(activeFrameworkId);
+  if (activeFrameworkId && frameworkKB) {
     const meta = getFrameworkMeta(activeFrameworkId);
-    if (frameworkKB && meta) {
+    if (meta) {
       parts.push(
         `[FRAMEWORK KB — ${meta.name} (${meta.origin})]\nThe user has explicitly invoked this framework. Run it on this project's context. Follow the Output structure section verbatim.\n\n${frameworkKB}`,
       );
