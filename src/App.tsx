@@ -72,6 +72,7 @@ import { preloadModeKB } from './lib/kb-mode-loader';
 import RevisitDueBanner from './components/RevisitDueBanner';
 import FounderFitModal from './components/FounderFitModal';
 import CapabilityChips from './components/CapabilityChips';
+import OnboardingWizard, { shouldShowOnboarding } from './components/OnboardingWizard';
 
 // Map the active working mode → default decision category. Pre-fills the
 // form when the user clicks "Log decision" from the chat header.
@@ -210,11 +211,13 @@ export default function App() {
   // is cleared so subsequent turns don't keep re-injecting.
   const [activeFrameworkId, setActiveFrameworkId] = React.useState<FrameworkId | null>(null);
   const [founderFitOpen, setFounderFitOpen] = React.useState(false);
+  const [onboardingOpen, setOnboardingOpen] = React.useState(false);
+  const [onboardingChecked, setOnboardingChecked] = React.useState(false);
 
   // Project context for the system prompt — when activeProjectId is set, the
   // agent gets a [PROJECT CONTEXT] block listing the project description and
   // the latest 10 non-reversed decisions.
-  const { byId: projectById } = useProjects({ userId: currentUser?.id ?? null });
+  const { byId: projectById, projects: allProjects } = useProjects({ userId: currentUser?.id ?? null });
   const { decisions: projectDecisions, log: logProjectDecision } = useDecisions({ projectId: activeProjectId });
   const activeProject = projectById(activeProjectId);
   const projectContext = React.useMemo(
@@ -233,6 +236,21 @@ export default function App() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [chatHistory, setChatHistory] = React.useState<any[]>([]);
+  // Onboarding trigger — checked once after first chat/project fetch.
+  React.useEffect(() => {
+    if (!currentUser || onboardingChecked) return;
+    const t = setTimeout(() => {
+      const hasChats = chatHistory.length > 0;
+      const hasProjects = allProjects.length > 0;
+      if (shouldShowOnboarding(currentUser.id, hasChats, hasProjects)) {
+        setOnboardingOpen(true);
+      }
+      setOnboardingChecked(true);
+    }, 600);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, chatHistory.length, allProjects.length]);
+
   const [activeChatId, setActiveChatId] = React.useState<string | null>(null);
   const [renamingChatId, setRenamingChatId] = React.useState<string | null>(null);
   const [renameValue, setRenameValue] = React.useState('');
@@ -901,6 +919,25 @@ export default function App() {
           userId={currentUser.id}
           userName={currentUser.name}
           onSaved={() => { if (currentUser) loadMemoryItems(currentUser.id); }}
+        />
+      )}
+
+      {/* First-run onboarding wizard. Auto-opens once for new users. */}
+      {currentUser && (
+        <OnboardingWizard
+          open={onboardingOpen}
+          userId={currentUser.id}
+          userName={currentUser.name}
+          onClose={() => setOnboardingOpen(false)}
+          onPickPath={(path) => {
+            if (path === 'need_idea') setActiveMode('IDEA_GENERATION');
+            else if (path === 'have_idea') setActiveMode('AUTO');
+          }}
+          onPickPrompt={(prompt, mode) => {
+            if (mode) setActiveMode(mode);
+            setInput(prompt);
+            setCurrentPage('chat');
+          }}
         />
       )}
 
