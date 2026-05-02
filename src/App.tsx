@@ -44,6 +44,7 @@ import {
   LayoutDashboard,
   Megaphone,
   TrendingUp,
+  Sparkles,
 } from 'lucide-react';
 import DocumentViewer from './components/DocumentViewer';
 import { motion, AnimatePresence } from 'motion/react';
@@ -69,6 +70,7 @@ import type { DecisionCategory } from './lib/types';
 import { FRAMEWORK_CATALOG, type FrameworkId } from './lib/kb-framework-loader';
 import RevisitDueBanner from './components/RevisitDueBanner';
 import FounderFitModal from './components/FounderFitModal';
+import CapabilityChips from './components/CapabilityChips';
 
 // Map the active working mode → default decision category. Pre-fills the
 // form when the user clicks "Log decision" from the chat header.
@@ -99,16 +101,20 @@ import { COCKROACH_DEFAULT_SYSTEM_PROMPT } from './lib/kb-constants';
 // within each group reflects typical use-frequency. Operator group
 // surfaces first (most users have an idea already); Discovery is for
 // the secondary "I don't have an idea yet" entry path.
-type ModeGroup = 'core' | 'operator' | 'discovery' | 'creative';
+type ModeGroup = 'auto' | 'core' | 'operator' | 'discovery' | 'creative';
 
 interface AppMode {
   id: string;
   icon: typeof Bot;
   label: string;
   group: ModeGroup;
+  description?: string;
 }
 
 const APP_MODES: AppMode[] = [
+  // Auto — default; cheap classifier picks the right mode per turn.
+  { id: 'AUTO',                icon: Sparkles,        label: 'Auto',                 group: 'auto', description: 'Smart pick — agent decides which skill fits your question.' },
+
   // Core — always-relevant
   { id: 'GENERAL',             icon: Bot,             label: 'General Chat',         group: 'core' },
   { id: 'THINKING',            icon: Brain,           label: 'Think Deeply',         group: 'core' },
@@ -138,6 +144,7 @@ const APP_MODES: AppMode[] = [
 ];
 
 const MODE_GROUP_LABELS: Record<ModeGroup, string> = {
+  auto:      'Smart',
   core:      'Core',
   operator:  'Build the business',
   discovery: 'Find an idea',
@@ -187,8 +194,13 @@ export default function App() {
   const [authChecking, setAuthChecking] = React.useState(true);
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = React.useState(false);
   const [isRightSidebarCollapsed, setIsRightSidebarCollapsed] = React.useState(false);
-  const [activeMode, setActiveMode] = React.useState('GENERAL');
+  const [activeMode, setActiveMode] = React.useState('AUTO');
+  // When AUTO routes to a specific mode, this holds the routed id so we
+  // can display "(routed)" in the picker without losing the AUTO selection.
+  const [routedMode, setRoutedMode] = React.useState<{ id: string; reasoning: string; confidence: string } | null>(null);
+  const [isRouting, setIsRouting] = React.useState(false);
   const [isModeSelectOpen, setIsModeSelectOpen] = React.useState(false);
+  const [modeSearch, setModeSearch] = React.useState('');
   const [currentPage, setCurrentPage] = React.useState<'chat' | 'settings' | 'research' | 'memory' | 'projects'>('chat');
   const [activeProjectId, setActiveProjectId] = React.useState<string | null>(null);
   const [logDecisionOpen, setLogDecisionOpen] = React.useState(false);
@@ -212,7 +224,7 @@ export default function App() {
 
   // Chat State
   const [input, setInput] = React.useState('');
-  const [messages, setMessages] = React.useState<{ id?: string, role: 'user' | 'assistant', content: string, rawText?: string, isSummary?: boolean }[]>([]);
+  const [messages, setMessages] = React.useState<{ id?: string, role: 'user' | 'assistant', content: string, rawText?: string, isSummary?: boolean, capabilities?: { mode?: string; framework?: string; routed?: boolean } }[]>([]);
   const [isTyping, setIsTyping] = React.useState(false);
   const [streamingContent, setStreamingContent] = React.useState('');
   const chatScrollRef = React.useRef<HTMLDivElement>(null);
@@ -581,9 +593,54 @@ export default function App() {
         rawText: rawContent !== displayContent ? rawContent : undefined,
       }]);
 
+      // Mode resolution: if AUTO, call the router with project context.
+      // The routed mode is what we feed into buildSystemPrompt; activeMode
+      // stays 'AUTO' so users see the persistent label.
+      let resolvedMode = activeMode;
+      if (activeMode === 'AUTO') {
+        setIsRouting(true);
+        try {
+          const routerResp = await fetch('/api/route-mode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: rawContent,
+              projectStage: activeProject?.stage ?? null,
+              recentDecisions: projectDecisions.slice(0, 5).map(d => `${d.category}: ${d.question}`),
+              founderFitSummary: memoryItems
+                .filter(m => m.category === 'founder_fit')
+                .slice(0, 3)
+                .map(m => m.content)
+                .join('\n')
+                .slice(0, 800) || null,
+            }),
+          });
+          if (routerResp.ok) {
+            const routed = await routerResp.json();
+            if (routed?.modeId && typeof routed.modeId === 'string') {
+              resolvedMode = routed.modeId;
+              setRoutedMode({
+                id: routed.modeId,
+                reasoning: routed.reasoning ?? '',
+                confidence: routed.confidence ?? 'low',
+              });
+            }
+          }
+        } catch (e) {
+          logger.warn('Router unavailable; falling back to GENERAL', { error: e instanceof Error ? e.message : String(e) });
+          resolvedMode = 'GENERAL';
+        } finally {
+          setIsRouting(false);
+        }
+      }
+
+      // Snapshot the framework id BEFORE we clear it; we want this on the
+      // capability chip for this turn even though it's cleared after send.
+      const frameworkUsed = activeFrameworkId;
+
       const builtPrompt = buildSystemPrompt({
         systemPromptBase: systemPrompt || COCKROACH_DEFAULT_SYSTEM_PROMPT,
-        kbToggles, memoryItems, activeMode,
+        kbToggles, memoryItems, activeMode: resolvedMode,
         userName: currentUser.name, isBrutalHonesty,
         projectContext,
         activeFrameworkId,
@@ -611,7 +668,16 @@ export default function App() {
         content: fullContent,
       }).select().single();
 
-      setMessages(prev => [...prev, { id: insertedAsstMsg?.id, role: 'assistant', content: fullContent }]);
+      setMessages(prev => [...prev, {
+        id: insertedAsstMsg?.id,
+        role: 'assistant',
+        content: fullContent,
+        capabilities: {
+          mode: resolvedMode,
+          framework: frameworkUsed ?? undefined,
+          routed: activeMode === 'AUTO',
+        },
+      }]);
 
       // Idea detection — offer full analysis if the user described a startup idea
       if (!overrideText && textInput && detectStartupIdea(textInput)) {
@@ -1408,6 +1474,13 @@ export default function App() {
                                 </motion.div>
                               )}
                             </motion.div>
+                            {msg.capabilities && (
+                              <CapabilityChips
+                                capabilities={msg.capabilities}
+                                modeLabel={APP_MODES.find(m => m.id === msg.capabilities?.mode)?.label}
+                                frameworkLabel={FRAMEWORK_CATALOG.find(f => f.id === msg.capabilities?.framework)?.name}
+                              />
+                            )}
                             {/* Action bar — CSS group-hover for reliable click */}
                             <div className="flex items-center gap-0.5 mt-1.5 pl-1 transition-opacity duration-150 opacity-0 group-hover/msg:opacity-100 pointer-events-none group-hover/msg:pointer-events-auto">
                               {([
@@ -1628,39 +1701,69 @@ export default function App() {
                        <div className="h-5 w-[1px] bg-border mx-1" />
                        <div className="relative">
                           {isModeSelectOpen && (
-                              <div className="absolute bottom-full mb-4 left-0 w-64 bg-background/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_16px_40px_-12px_rgba(0,0,0,0.8)] z-50 animate-in fade-in zoom-in-95 origin-bottom-left">
-                                  <div className="max-h-[400px] overflow-y-auto layaa-scroll p-2 space-y-1">
-                                      {(['core', 'operator', 'discovery', 'creative'] as const).map(group => {
-                                        const modesInGroup = APP_MODES.filter(m => m.group === group);
-                                        if (modesInGroup.length === 0) return null;
-                                        return (
-                                          <div key={group} className="space-y-0.5">
-                                            <p className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-[0.2em] px-3 pt-2 pb-1">
-                                              {MODE_GROUP_LABELS[group]}
-                                            </p>
-                                            {modesInGroup.map(mode => (
-                                              <button
-                                                key={mode.id}
-                                                onClick={() => { setActiveMode(mode.id); setIsModeSelectOpen(false); }}
-                                                className={cn("w-full flex items-center gap-3 px-3 py-2 text-[13px] font-medium text-left rounded-xl transition-all", activeMode === mode.id ? "text-primary bg-primary/10 shadow-inner" : "text-foreground hover:bg-white/5")}
-                                              >
-                                                <mode.icon size={15} className={activeMode === mode.id ? "text-primary" : "text-muted-foreground"} />
-                                                <span className="truncate tracking-wide">{mode.label}</span>
-                                                {activeMode === mode.id && <Pin size={11} className="ml-auto opacity-50" />}
-                                              </button>
-                                            ))}
-                                          </div>
-                                        );
-                                      })}
+                              <div className="absolute bottom-full mb-4 left-0 w-80 bg-background/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_16px_40px_-12px_rgba(0,0,0,0.8)] z-50 animate-in fade-in zoom-in-95 origin-bottom-left">
+                                  <div className="p-2">
+                                    <div className="relative px-2 pt-1 pb-2">
+                                      <input
+                                        autoFocus
+                                        value={modeSearch}
+                                        onChange={e => setModeSearch(e.target.value)}
+                                        placeholder="Search skills…"
+                                        className="w-full bg-surface-mid/60 border border-border/50 rounded-lg px-3 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/40"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="max-h-[420px] overflow-y-auto layaa-scroll px-2 pb-2 space-y-1">
+                                      {(() => {
+                                        const q = modeSearch.trim().toLowerCase();
+                                        const matches = (m: AppMode) => !q || m.id.toLowerCase().includes(q) || m.label.toLowerCase().includes(q) || (m.description ?? '').toLowerCase().includes(q);
+                                        const groups: ModeGroup[] = ['auto', 'core', 'operator', 'discovery', 'creative'];
+                                        return groups.map(group => {
+                                          const modesInGroup = APP_MODES.filter(m => m.group === group && matches(m));
+                                          if (modesInGroup.length === 0) return null;
+                                          return (
+                                            <div key={group} className="space-y-0.5">
+                                              <p className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-[0.2em] px-3 pt-2 pb-1 flex items-center gap-1.5">
+                                                <span>{MODE_GROUP_LABELS[group]}</span>
+                                                <span className="text-muted-foreground/40 normal-case tracking-normal">({modesInGroup.length})</span>
+                                              </p>
+                                              {modesInGroup.map(mode => (
+                                                <button
+                                                  key={mode.id}
+                                                  onClick={() => { setActiveMode(mode.id); setIsModeSelectOpen(false); setModeSearch(''); if (mode.id !== 'AUTO') setRoutedMode(null); }}
+                                                  className={cn("w-full flex items-start gap-3 px-3 py-2 text-[13px] font-medium text-left rounded-xl transition-all", activeMode === mode.id ? "text-primary bg-primary/10 shadow-inner" : "text-foreground hover:bg-white/5")}
+                                                >
+                                                  <mode.icon size={15} className={cn('mt-0.5 shrink-0', activeMode === mode.id ? "text-primary" : "text-muted-foreground")} />
+                                                  <div className="flex-1 min-w-0">
+                                                    <span className="block truncate tracking-wide">{mode.label}</span>
+                                                    {mode.description && (
+                                                      <span className="block text-[10px] text-muted-foreground/60 truncate font-normal mt-0.5">{mode.description}</span>
+                                                    )}
+                                                  </div>
+                                                  {activeMode === mode.id && <Pin size={11} className="mt-1 shrink-0 opacity-50" />}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          );
+                                        });
+                                      })()}
                                   </div>
                               </div>
                           )}
-                          <button 
+                          <button
                              onClick={() => setIsModeSelectOpen(!isModeSelectOpen)}
                              className={cn("flex items-center gap-2 px-3 py-1.5 bg-background border rounded-full shadow-sm hover:border-primary/50 transition-all", isModeSelectOpen ? "border-primary/50 ring-2 ring-primary/20 bg-primary/5" : "border-white/10")}
                           >
-                             <div className="w-2 h-2 bg-success rounded-full shadow-[0_0_8px_rgba(45,90,39,0.8)]" />
-                             <span className="text-[11px] font-bold text-primary uppercase tracking-[0.15em] px-1">{APP_MODES.find(m => m.id === activeMode)?.label || 'Neural'}</span>
+                             {activeMode === 'AUTO' ? (
+                               <Sparkles size={11} className={cn(isRouting ? 'text-primary animate-pulse' : 'text-primary')} />
+                             ) : (
+                               <div className="w-2 h-2 bg-success rounded-full shadow-[0_0_8px_rgba(45,90,39,0.8)]" />
+                             )}
+                             <span className="text-[11px] font-bold text-primary uppercase tracking-[0.15em] px-1">
+                               {activeMode === 'AUTO' && routedMode
+                                 ? `Auto → ${APP_MODES.find(m => m.id === routedMode.id)?.label ?? routedMode.id}`
+                                 : APP_MODES.find(m => m.id === activeMode)?.label || 'Neural'}
+                             </span>
                           </button>
                        </div>
                     </div>
@@ -1740,6 +1843,18 @@ export default function App() {
             <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 border border-primary/20 rounded-xl">
               {(() => { const m = APP_MODES.find(m => m.id === activeMode); return m ? <><m.icon size={13} className="text-primary" /><span className="text-[12px] font-bold text-primary">{m.label}</span></> : null; })()}
             </div>
+            {activeMode === 'AUTO' && routedMode && (
+              <div className="mt-1.5 px-3 py-1.5 bg-surface-mid/40 border border-border/40 rounded-lg">
+                <p className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest">Routed to</p>
+                <p className="text-[11px] text-foreground font-medium mt-0.5">
+                  {APP_MODES.find(m => m.id === routedMode.id)?.label ?? routedMode.id}
+                  {routedMode.confidence === 'low' && <span className="text-[9px] text-muted-foreground/60 ml-1">· low confidence</span>}
+                </p>
+                {routedMode.reasoning && (
+                  <p className="text-[10px] text-muted-foreground/70 mt-0.5 italic line-clamp-2">{routedMode.reasoning}</p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Chat context */}
