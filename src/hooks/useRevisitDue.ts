@@ -3,7 +3,7 @@
 // can show a single global banner regardless of which project the
 // user is in.
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Decision } from '../lib/types';
 
@@ -22,10 +22,16 @@ export function useRevisitDue({ userId }: Params) {
   const [items, setItems] = useState<RevisitDueItem[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  const refresh = useCallback(async () => {
+  // Cancellation flag prevents setState-after-unmount when userId
+  // changes mid-fetch or component unmounts during the supabase call.
+  const cancelRef = React.useRef({ cancelled: false });
+
+  const fetchAll = useCallback(async (cancelToken: { cancelled: boolean }) => {
     if (!userId) {
-      setItems([]);
-      setLoaded(true);
+      if (!cancelToken.cancelled) {
+        setItems([]);
+        setLoaded(true);
+      }
       return;
     }
     const today = new Date();
@@ -37,9 +43,12 @@ export function useRevisitDue({ userId }: Params) {
       .select('*, projects:project_id(id, name, stage)')
       .eq('user_id', userId)
       .is('reversed_at', null)
+      .is('outcome_observed', null) // exclude decisions already marked revisited
       .not('revisit_at', 'is', null)
       .lte('revisit_at', cutoffIso)
       .order('revisit_at', { ascending: true });
+
+    if (cancelToken.cancelled) return;
 
     if (error || !data) {
       setItems([]);
@@ -67,9 +76,21 @@ export function useRevisitDue({ userId }: Params) {
     setLoaded(true);
   }, [userId]);
 
+  const refresh = useCallback(() => {
+    cancelRef.current.cancelled = true;
+    const token = { cancelled: false };
+    cancelRef.current = token;
+    return fetchAll(token);
+  }, [fetchAll]);
+
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    const token = { cancelled: false };
+    cancelRef.current = token;
+    fetchAll(token);
+    return () => {
+      token.cancelled = true;
+    };
+  }, [fetchAll]);
 
   const count = useMemo(() => items.length, [items]);
 

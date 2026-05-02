@@ -45,11 +45,16 @@ export function useShareLink({
       token = existing.share_token;
     } else {
       token = crypto.randomUUID();
-      await supabase.from('chats').update({
+      const { error: updateErr } = await supabase.from('chats').update({
         share_token: token,
         share_expires_at: expiryIso,
         share_revoked_at: null,
       }).eq('id', activeChatId);
+      if (updateErr) {
+        logger.error('Share token update failed', { error: updateErr.message });
+        toast.error(`Could not create share link: ${updateErr.message}`);
+        return;
+      }
     }
 
     const link = `${window.location.origin}${window.location.pathname}?shared=${token}`;

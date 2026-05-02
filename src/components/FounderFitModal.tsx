@@ -178,6 +178,7 @@ export default function FounderFitModal({ open, onClose, userId, userName, onSav
               </div>
 
               <textarea
+                key={q.id}
                 value={currentAnswer}
                 onChange={(e) => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
                 placeholder={q.placeholder}

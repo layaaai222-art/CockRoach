@@ -24,8 +24,15 @@ export default function ProjectSwitcher({
   onOpenAll,
   onCreateNew,
 }: Props) {
-  const { projects, loading } = useProjects({ userId });
+  const { projects, loading, refresh } = useProjects({ userId });
   const [open, setOpen] = React.useState(false);
+
+  // Re-fetch when the dropdown is opened so newly-created projects (from
+  // ProjectsList or other entry points using a different hook instance)
+  // show up here without requiring a remount.
+  React.useEffect(() => {
+    if (open) void refresh();
+  }, [open, refresh]);
 
   const active: Project | null = React.useMemo(
     () => projects.find(p => p.id === activeProjectId) ?? null,
