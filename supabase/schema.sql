@@ -271,6 +271,35 @@ alter table public.api_usage_log disable row level security;
 grant all on table public.api_usage_log to anon, authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- Phase 3 — billing + brand kit + onboarding state
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.subscriptions (
+  user_id uuid primary key,
+  stripe_customer_id text,
+  stripe_subscription_id text,
+  tier text not null default 'free',
+  status text not null default 'active',
+  current_period_end timestamptz,
+  created_at timestamptz default timezone('utc'::text, now()) not null,
+  updated_at timestamptz default timezone('utc'::text, now()) not null
+);
+create index if not exists idx_subscriptions_status on public.subscriptions(status);
+alter table public.subscriptions disable row level security;
+grant all on table public.subscriptions to anon, authenticated;
+
+create table if not exists public.user_brand_kits (
+  user_id uuid primary key,
+  logo_url text,
+  accent_color text default '#8B1414',
+  font_family text default 'Calibri',
+  updated_at timestamptz default timezone('utc'::text, now()) not null
+);
+alter table public.user_brand_kits disable row level security;
+grant all on table public.user_brand_kits to anon, authenticated;
+
+alter table public.users add column if not exists onboarding_completed_at timestamptz;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- Triggers
 -- ─────────────────────────────────────────────────────────────────────────────
 create or replace function public.set_updated_at_now()

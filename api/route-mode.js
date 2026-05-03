@@ -67,7 +67,9 @@ const MODE_CATALOG = [
   { id: 'IDEA_VALIDATION',     desc: 'Validating an idea against multi-axis scoring + evidence.' },
 
   { id: 'UI_DESIGN',           desc: 'UI/UX design specs for v0 / Lovable / Figma Make / Stitch.' },
-  { id: 'IMAGE_PROMPTING',     desc: 'Crafting structured image prompts for visual generation.' },
+  { id: 'IMAGE_PROMPTING',     desc: 'Crafting structured image prompts (text only — no rendering).' },
+  { id: 'GENERATE_IMAGE',      desc: 'Generate actual images via GPT-image-2 — pick this when user wants a rendered image, hero, asset, mood-board.' },
+  { id: 'VIBE_CODING',         desc: 'Build a runnable single-page web app (landing page, prototype, internal tool) with live preview. Pick when user says "build me", "make a landing page", "prototype X".' },
 ];
 
 const VALID_MODE_IDS = new Set(MODE_CATALOG.map(m => m.id));

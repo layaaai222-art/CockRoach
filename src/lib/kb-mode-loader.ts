@@ -33,6 +33,8 @@ const MODE_LOADERS: Record<string, () => Promise<{ default: string }>> = {
   IMAGE_PROMPTING:     () => import('../../kb/modes/IMAGE_PROMPTING.md?raw'),
   PAID_ADS:            () => import('../../kb/modes/PAID_ADS.md?raw'),
   SEO_AND_CONTENT:     () => import('../../kb/modes/SEO_AND_CONTENT.md?raw'),
+  GENERATE_IMAGE:      () => import('../../kb/modes/GENERATE_IMAGE.md?raw'),
+  VIBE_CODING:         () => import('../../kb/modes/VIBE_CODING.md?raw'),
 };
 
 const cache = new Map<string, string>();

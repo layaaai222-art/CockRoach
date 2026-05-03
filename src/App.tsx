@@ -45,6 +45,7 @@ import {
   Megaphone,
   TrendingUp,
   Sparkles,
+  Code,
 } from 'lucide-react';
 import DocumentViewer from './components/DocumentViewer';
 import { motion, AnimatePresence } from 'motion/react';
@@ -73,6 +74,8 @@ import RevisitDueBanner from './components/RevisitDueBanner';
 import FounderFitModal from './components/FounderFitModal';
 import CapabilityChips from './components/CapabilityChips';
 import OnboardingWizard, { shouldShowOnboarding } from './components/OnboardingWizard';
+import InlineImageGen from './components/InlineImageGen';
+import LivePreview, { extractPreviewBlock } from './components/LivePreview';
 
 // Map the active working mode → default decision category. Pre-fills the
 // form when the user clicks "Log decision" from the chat header.
@@ -143,6 +146,8 @@ const APP_MODES: AppMode[] = [
   // Creative — adjunct utilities
   { id: 'UI_DESIGN',           icon: LayoutDashboard, label: 'UI Design Spec',       group: 'creative' },
   { id: 'IMAGE_PROMPTING',     icon: ImageIcon,       label: 'Create Visual Prompt', group: 'creative' },
+  { id: 'GENERATE_IMAGE',      icon: ImageIcon,       label: 'Generate Image',       group: 'creative', description: 'Produce ready-to-render image prompts; click Generate inline to render via GPT-image-2.' },
+  { id: 'VIBE_CODING',         icon: Code,            label: 'Vibe Coding',          group: 'creative', description: 'Build a runnable single-page web app in one shot. Live preview + version history.' },
 ];
 
 const MODE_GROUP_LABELS: Record<ModeGroup, string> = {
@@ -1547,6 +1552,24 @@ export default function App() {
                                 frameworkLabel={FRAMEWORK_CATALOG.find(f => f.id === msg.capabilities?.framework)?.name}
                               />
                             )}
+                            {msg.capabilities?.mode === 'GENERATE_IMAGE' && (
+                              <InlineImageGen
+                                promptText={msg.rawText || msg.content}
+                                userId={currentUser?.id}
+                                chatId={activeChatId}
+                                projectId={activeProjectId}
+                              />
+                            )}
+                            {msg.capabilities?.mode === 'VIBE_CODING' && (() => {
+                              const html = extractPreviewBlock(msg.rawText || msg.content);
+                              return html ? (
+                                <LivePreview
+                                  htmlContent={html}
+                                  title={`Vibe app · ${activeProject?.name ?? 'sandbox'}`}
+                                  projectId={activeProjectId}
+                                />
+                              ) : null;
+                            })()}
                             {/* Action bar — CSS group-hover for reliable click */}
                             <div className="flex items-center gap-0.5 mt-1.5 pl-1 transition-opacity duration-150 opacity-0 group-hover/msg:opacity-100 pointer-events-none group-hover/msg:pointer-events-auto">
                               {([

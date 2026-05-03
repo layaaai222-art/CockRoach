@@ -3,7 +3,7 @@
 > **Working file for the build team.** Updated continuously as work
 > progresses. Read this first to know where the project stands.
 
-**Last updated:** 2026-05-03 (Phase 2 — bug bash + perf + security + cost monitoring)
+**Last updated:** 2026-05-03 (image gen + vibe coding + Phase 3 scaffolding)
 
 ---
 
@@ -803,6 +803,110 @@ launch, freeze all non-essential testing and shift to mock-mode for QA.
 - **Next:** Phase 3 of the launch plan — auth (Supabase Auth + RLS
   enable + per-user policies), Stripe billing, transactional email
   (Resend), marketing landing page, privacy/ToS, monitoring dashboards.
+
+### 2026-05-03 — Image gen + vibe coding + Phase 3 scaffolding
+- **Founder ask.** "Complete current version to full vision; add
+  GPT-image-2 image creation; add vibe-coding parity with Lovable /
+  Emergent / DeepSite; complete Phase 3."
+- **Honest scoping.** "Lovable parity" is a multi-year roadmap; I
+  shipped a credible V1 vibe-coding instead of pretending. Phase 3
+  was scoped to STRUCTURAL prep — schema, routes, stubs — with the
+  actual auth/billing/email **flip** still gated behind founder
+  action (Stripe account, Resend domain DNS, etc.).
+- **Image generation (full feature).**
+  - New `api/image-gen.js` Vercel function — Azure GPT-image-2
+    proxy. Origin allow-list, 10 req/min rate limit, 90s timeout
+    (image gen is slow). Returns base64 PNG. Cost-logs to
+    api_usage_log with rough per-image USD estimate.
+  - New `kb/modes/GENERATE_IMAGE.md` mode KB — 5-layer prompt
+    anatomy, size+quality cheat sheet, refusal rules for IP /
+    real people / harmful content. Outputs exactly 3 prompt
+    variants with explicit Size + Quality tags.
+  - `src/components/InlineImageGen.tsx` — parses assistant
+    response for `### Prompt A/B/C` headings, renders a card per
+    prompt with inline Generate button + size/quality selectors +
+    download + save-to-project. Auto-mounted under assistant
+    messages where mode is GENERATE_IMAGE.
+  - Env: AZURE_OPENAI_IMAGE_DEPLOYMENT + AZURE_OPENAI_IMAGE_VERSION.
+- **Vibe coding V1.**
+  - New `kb/modes/VIBE_CODING.md` — primes the agent to output one
+    `\`\`\`preview` block containing a complete self-contained HTML
+    file: React 19 + Tailwind + Babel-standalone + Inter via CDN.
+    Hard rules on quality (typography, spacing, real content), no
+    Lorem Ipsum, mobile-responsive, accessibility. Iteration:
+    output FULL updated HTML, not diffs.
+  - `src/components/LivePreview.tsx` — sandboxed iframe via srcdoc
+    (no parent-page access). Toolbar: Visual / Code toggle, device
+    sizes (mobile / tablet / desktop), reload, open-in-new-tab,
+    download .html, save-to-project as versioned artifact (uses
+    parent_artifact_id chain, auto-bumps version).
+  - Auto-mounted under assistant messages where mode is VIBE_CODING.
+  - Capability honestly limited: single-file, no real backend, no
+    package install, no multi-file. Documented clearly in mode KB.
+  - Router catalog updated so AUTO can pick VIBE_CODING when user
+    says "build me", "make a landing page", "prototype X".
+- **Phase 3 scaffolding (structural pieces, not the launch flip).**
+  - DB migrations (applied via Supabase MCP):
+    - `subscriptions` table — keyed by user_id, tracks Stripe
+      customer + subscription IDs, tier (free/pro), status,
+      current_period_end. Populated by webhook handler.
+    - `user_brand_kits` table — logo_url, accent_color,
+      font_family. Empty until Phase 1.5 D3 is done post-storage.
+    - `users.onboarding_completed_at` column added (so the
+      OnboardingWizard flag can move off localStorage post-auth).
+  - `api/stripe-webhook.js` — Stripe webhook receiver. Handles
+    `customer.subscription.{created,updated,deleted}`. Verifies
+    signature, upserts subscriptions row. Returns 503 until
+    STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET are set in Vercel env.
+    Stripe SDK installed (^22.1.0).
+  - `api/email.js` — Resend transactional email sender. Templates
+    inline: welcome / password_reset / receipt / weekly_digest.
+    Returns 503 until RESEND_API_KEY + RESEND_FROM_EMAIL are set.
+  - `src/components/MarketingLanding.tsx` — public landing page at
+    `/` (when VITE_MARKETING_ROUTING=true). Hero + 6-feature grid
+    + dual CTAs to /app. Layaa AI branded.
+  - `src/components/StaticDoc.tsx` — renders /privacy and /terms
+    from public/legal/{privacy,terms}.md.
+  - `public/legal/privacy.md` + `public/legal/terms.md` — first-
+    draft GDPR/CCPA-aware policies. Marked as starting-point
+    template; founder needs to have a lawyer review before going
+    live.
+  - `src/main.tsx` — env-flag-gated routing. Default behavior
+    unchanged (chat-only); VITE_MARKETING_ROUTING=true splits
+    `/` → marketing, `/privacy` `/terms` → static docs, anything
+    else → chat. Avoids breaking dev workflow until launch flip.
+  - `.env.example` updated with all Phase 3 env-var slots
+    (Stripe, Resend, Supabase service-role).
+- **Mode count: 21** (added GENERATE_IMAGE + VIBE_CODING).
+- **Verified.** typecheck ✓, lint 0 errors, build ✓.
+- **NOT done this session (and why):**
+  - **Auth migration (Supabase Auth + RLS enable + per-user
+    policies)** — this is the launch-flip move; founder needs to be
+    ready to migrate the 4 default profiles, rotate keys, and
+    verify the new flow end-to-end before flipping. I'd rather do
+    this in a focused session right before launch.
+  - **Stripe products + checkout flow on the client** — needs a
+    real Stripe account and live keys; webhook handler is ready
+    server-side but the in-app upgrade button + price IDs are
+    waiting on founder.
+  - **Resend domain DNS verification + sender-from address** —
+    requires DNS records on layaa.ai. Founder action.
+  - **Marketing landing wired as default route** — opt-in via env
+    var so we can preview and finalize copy before flipping.
+  - **Lovable / Emergent feature parity** — multi-file editing,
+    package install, deploy targets, real-time collab. Each is a
+    multi-week project. V1 ships single-file with live preview
+    and version history, which covers ~80% of the value for
+    rapid prototyping.
+- **Next session — Phase 3 finish (the launch flip):**
+  1. Auth migration (single dedicated session)
+  2. Stripe products + checkout button (after founder provisions
+     account)
+  3. Resend domain DNS (after founder provisions)
+  4. Marketing landing finalized + flip the env flag
+  5. Sentry + PostHog instrumentation
+  6. Cost-monitoring dashboard inside the app (read api_usage_log
+     and chart it)
 
 ---
 
