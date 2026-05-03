@@ -97,7 +97,12 @@ export default async function handler(req, res) {
     return res.status(429).json({ error: 'Too many image requests — try again in a minute.' });
   }
 
+  // Image generation may live on a separate Azure resource from chat
+  // (different region / deployment). We support dedicated AZURE_IMAGE_*
+  // env vars and fall back to the chat resource if not set.
   const {
+    AZURE_IMAGE_ENDPOINT,
+    AZURE_IMAGE_KEY,
     AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_KEY,
     AZURE_OPENAI_IMAGE_DEPLOYMENT,
@@ -105,9 +110,12 @@ export default async function handler(req, res) {
     AZURE_OPENAI_VERSION,
   } = process.env;
 
-  if (!AZURE_OPENAI_ENDPOINT || !AZURE_OPENAI_KEY || !AZURE_OPENAI_IMAGE_DEPLOYMENT) {
+  const endpoint = AZURE_IMAGE_ENDPOINT || AZURE_OPENAI_ENDPOINT;
+  const key = AZURE_IMAGE_KEY || AZURE_OPENAI_KEY;
+
+  if (!endpoint || !key || !AZURE_OPENAI_IMAGE_DEPLOYMENT) {
     return res.status(500).json({
-      error: 'Image generation not configured. Set AZURE_OPENAI_IMAGE_DEPLOYMENT (and optionally AZURE_OPENAI_IMAGE_VERSION) in server env.',
+      error: 'Image generation not configured. Set AZURE_IMAGE_ENDPOINT + AZURE_IMAGE_KEY + AZURE_OPENAI_IMAGE_DEPLOYMENT in server env.',
     });
   }
 
@@ -122,7 +130,7 @@ export default async function handler(req, res) {
   const n = Math.min(Math.max(parseInt(body.n, 10) || 1, 1), 4);
 
   const apiVersion = AZURE_OPENAI_IMAGE_VERSION || AZURE_OPENAI_VERSION || '2025-04-01-preview';
-  const base = AZURE_OPENAI_ENDPOINT.endsWith('/') ? AZURE_OPENAI_ENDPOINT.slice(0, -1) : AZURE_OPENAI_ENDPOINT;
+  const base = endpoint.endsWith('/') ? endpoint.slice(0, -1) : endpoint;
   const azureUrl = `${base}/openai/deployments/${AZURE_OPENAI_IMAGE_DEPLOYMENT}/images/generations?api-version=${apiVersion}`;
 
   const startMs = Date.now();
@@ -133,7 +141,7 @@ export default async function handler(req, res) {
   try {
     azureResp = await fetch(azureUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'api-key': AZURE_OPENAI_KEY },
+      headers: { 'Content-Type': 'application/json', 'api-key': key },
       body: JSON.stringify({ prompt, size, quality, n, output_format: 'png' }),
       signal: controller.signal,
     });
