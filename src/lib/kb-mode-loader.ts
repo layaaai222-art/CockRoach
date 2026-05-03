@@ -28,9 +28,11 @@ const MODE_LOADERS: Record<string, () => Promise<{ default: string }>> = {
   FUNDRAISING:         () => import('../../kb/modes/FUNDRAISING.md?raw'),
   HIRING_AND_EQUITY:   () => import('../../kb/modes/HIRING_AND_EQUITY.md?raw'),
   LEGAL_AND_OPS:       () => import('../../kb/modes/LEGAL_AND_OPS.md?raw'),
+  // PIVOT_OR_PERSEVERE retired from the picker — replaced by Fork-chat
+  // branching. KB kept for the auto-router to inject when a pivot
+  // question is detected.
   PIVOT_OR_PERSEVERE:  () => import('../../kb/modes/PIVOT_OR_PERSEVERE.md?raw'),
   UI_DESIGN:           () => import('../../kb/modes/UI_DESIGN.md?raw'),
-  IMAGE_PROMPTING:     () => import('../../kb/modes/IMAGE_PROMPTING.md?raw'),
   PAID_ADS:            () => import('../../kb/modes/PAID_ADS.md?raw'),
   SEO_AND_CONTENT:     () => import('../../kb/modes/SEO_AND_CONTENT.md?raw'),
   GENERATE_IMAGE:      () => import('../../kb/modes/GENERATE_IMAGE.md?raw'),

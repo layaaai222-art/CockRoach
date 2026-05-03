@@ -76,6 +76,8 @@ import CapabilityChips from './components/CapabilityChips';
 import OnboardingWizard, { shouldShowOnboarding } from './components/OnboardingWizard';
 import InlineImageGen from './components/InlineImageGen';
 import LivePreview, { extractPreviewBlock } from './components/LivePreview';
+import UpgradeModal from './components/UpgradeModal';
+import { useTier, capabilitiesFor } from './hooks/useTier';
 
 // Map the active working mode → default decision category. Pre-fills the
 // form when the user clicks "Log decision" from the chat header.
@@ -124,7 +126,6 @@ const APP_MODES: AppMode[] = [
   { id: 'GENERAL',             icon: Bot,             label: 'General Chat',         group: 'core' },
   { id: 'THINKING',            icon: Brain,           label: 'Think Deeply',         group: 'core' },
   { id: 'DEEP_RESEARCH',       icon: Search,          label: 'Research Market',      group: 'core' },
-  { id: 'PIVOT_OR_PERSEVERE',  icon: GitBranch,       label: 'Pivot or Persevere',   group: 'core' },
 
   // Operator — post-idea-chosen (primary lane)
   { id: 'CUSTOMER_DISCOVERY',  icon: Headphones,      label: 'Customer Discovery',   group: 'operator' },
@@ -145,7 +146,6 @@ const APP_MODES: AppMode[] = [
 
   // Creative — adjunct utilities
   { id: 'UI_DESIGN',           icon: LayoutDashboard, label: 'UI Design Spec',       group: 'creative' },
-  { id: 'IMAGE_PROMPTING',     icon: ImageIcon,       label: 'Create Visual Prompt', group: 'creative' },
   { id: 'GENERATE_IMAGE',      icon: ImageIcon,       label: 'Generate Image',       group: 'creative', description: 'Produce ready-to-render image prompts; click Generate inline to render via GPT-image-2.' },
   { id: 'VIBE_CODING',         icon: Code,            label: 'Vibe Coding',          group: 'creative', description: 'Build a runnable single-page web app in one shot. Live preview + version history.' },
 ];
@@ -216,6 +216,17 @@ export default function App() {
   // is cleared so subsequent turns don't keep re-injecting.
   const [activeFrameworkId, setActiveFrameworkId] = React.useState<FrameworkId | null>(null);
   const [founderFitOpen, setFounderFitOpen] = React.useState(false);
+  const [upgradeOpen, setUpgradeOpen] = React.useState(false);
+  const [upgradeReason, setUpgradeReason] = React.useState<string | undefined>(undefined);
+  const tierState = useTier({ userId: currentUser?.id });
+  // Capabilities reserved for upcoming gates (export watermark, monthly
+  // quota enforcement, brand kit). Not yet read everywhere we'll need it
+  // — keeping the resolver wired so Phase 3 launch flip is one diff.
+  const _capabilities = capabilitiesFor(tierState.tier); void _capabilities;
+  const requireProFor = React.useCallback((feature: string) => {
+    setUpgradeReason(`${feature} is a Pro feature. Upgrade to unlock unlimited use.`);
+    setUpgradeOpen(true);
+  }, []);
   const [onboardingOpen, setOnboardingOpen] = React.useState(false);
   const [onboardingChecked, setOnboardingChecked] = React.useState(false);
 
@@ -883,6 +894,56 @@ export default function App() {
     }
   };
 
+  // Fork the current chat from the message at `forkPointIndex`. Creates
+  // a new chat with parent_chat_id pointing back to the source, copies
+  // messages [0..forkPointIndex] into it, and switches to it. The fork
+  // is visualized as a sibling in chat history.
+  const handleForkChat = async (forkPointIndex: number) => {
+    if (!currentUser || !activeChatId) return;
+    const sourceTitle = chatHistory.find(c => c.id === activeChatId)?.title || 'Chat';
+    const forkTitle = `Fork: ${sourceTitle}`.slice(0, 80);
+
+    const messagesToCopy = messages.slice(0, forkPointIndex + 1);
+    const forkPointMsgId = messages[forkPointIndex]?.id ?? null;
+
+    // Create the new chat row
+    const { data: newChat, error: chatErr } = await supabase
+      .from('chats')
+      .insert({
+        user_id: currentUser.id,
+        title: forkTitle,
+        project_id: activeProjectId,
+        parent_chat_id: activeChatId,
+        fork_point_message_id: forkPointMsgId,
+      })
+      .select('id, title, updated_at')
+      .single();
+    if (chatErr || !newChat) {
+      toast.error(`Fork failed: ${chatErr?.message ?? 'unknown'}`);
+      return;
+    }
+
+    // Copy messages
+    if (messagesToCopy.length > 0) {
+      const rows = messagesToCopy.map(m => ({
+        chat_id: newChat.id,
+        role: m.role,
+        content: m.content,
+        raw_text: m.rawText ?? null,
+      }));
+      const { error: msgErr } = await supabase.from('messages').insert(rows);
+      if (msgErr) {
+        toast.error(`Fork (copy) failed: ${msgErr.message}`);
+        return;
+      }
+    }
+
+    setChatHistory(prev => [{ id: newChat.id, title: newChat.title, updatedAt: newChat.updated_at }, ...prev]);
+    setActiveChatId(newChat.id);
+    await loadChatHistory(currentUser.id);
+    toast.success('Forked — explore the alternate path here');
+  };
+
   const handleRegenerateResponse = async () => {
     if (!currentUser || isTyping || streamingContent) return;
     // Find last assistant msg and the user msg before it
@@ -954,6 +1015,12 @@ export default function App() {
           onSaved={() => { if (currentUser) loadMemoryItems(currentUser.id); }}
         />
       )}
+
+      <UpgradeModal
+        open={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        reason={upgradeReason}
+      />
 
       {/* First-run onboarding wizard. Auto-opens once for new users. */}
       {currentUser && (
@@ -1532,7 +1599,14 @@ export default function App() {
                               className="bg-card border border-primary/10 rounded-2xl rounded-tl-sm px-4 py-3">
                               <div className="prose-cockroach">
                                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
-                                  {msg.content}
+                                  {/* Strip the ```preview``` block from the
+                                      markdown when LivePreview will render it
+                                      below — avoids showing the same code
+                                      twice in the bubble. */}
+                                  {msg.capabilities?.mode === 'VIBE_CODING'
+                                    ? msg.content.replace(/```preview\s*\n[\s\S]+?\n```/g, '')
+                                                  .replace(/```html\s*\n[\s\S]+?\n```/g, '')
+                                    : msg.content}
                                 </ReactMarkdown>
                               </div>
                               {i === messages.length - 1 && showAnalysisButton && !isTyping && !streamingContent && (
@@ -1577,6 +1651,7 @@ export default function App() {
                                 { icon: ThumbsUp, title: 'Good', onClick: () => setMessageRatings(r => ({ ...r, [msg.id || String(i)]: 'up' })), active: messageRatings[msg.id || String(i)] === 'up' },
                                 { icon: ThumbsDown, title: 'Bad', onClick: () => setMessageRatings(r => ({ ...r, [msg.id || String(i)]: 'down' })), active: messageRatings[msg.id || String(i)] === 'down' },
                                 { icon: FileDown, title: 'Open as document', onClick: () => handleOpenAsDocument(msg.content) },
+                                { icon: GitBranch, title: 'Fork from here — explore an alternate path', onClick: () => handleForkChat(i) },
                                 { icon: RefreshCw, title: 'Regenerate', onClick: () => i === messages.length - 1 && handleRegenerateResponse() },
                               ] as { icon: any; title: string; onClick: () => void; active?: boolean }[]).map(({ icon: Icon, title, onClick, active }) => (
                                 <button key={title} onClick={onClick} title={title}
@@ -1819,12 +1894,29 @@ export default function App() {
                                               {modesInGroup.map(mode => (
                                                 <button
                                                   key={mode.id}
-                                                  onClick={() => { setActiveMode(mode.id); setIsModeSelectOpen(false); setModeSearch(''); if (mode.id !== 'AUTO') { setRoutedMode(null); preloadModeKB(mode.id); } }}
+                                                  onClick={() => {
+                                                    // Pro gate: image gen + vibe coding require Pro.
+                                                    if (tierState.tier === 'free' && (mode.id === 'GENERATE_IMAGE' || mode.id === 'VIBE_CODING')) {
+                                                      setIsModeSelectOpen(false);
+                                                      setModeSearch('');
+                                                      requireProFor(mode.label);
+                                                      return;
+                                                    }
+                                                    setActiveMode(mode.id);
+                                                    setIsModeSelectOpen(false);
+                                                    setModeSearch('');
+                                                    if (mode.id !== 'AUTO') { setRoutedMode(null); preloadModeKB(mode.id); }
+                                                  }}
                                                   className={cn("w-full flex items-start gap-3 px-3 py-2 text-[13px] font-medium text-left rounded-xl transition-all", activeMode === mode.id ? "text-primary bg-primary/10 shadow-inner" : "text-foreground hover:bg-white/5")}
                                                 >
                                                   <mode.icon size={15} className={cn('mt-0.5 shrink-0', activeMode === mode.id ? "text-primary" : "text-muted-foreground")} />
                                                   <div className="flex-1 min-w-0">
-                                                    <span className="block truncate tracking-wide">{mode.label}</span>
+                                                    <div className="flex items-center gap-1.5">
+                                                      <span className="block truncate tracking-wide">{mode.label}</span>
+                                                      {tierState.tier === 'free' && (mode.id === 'GENERATE_IMAGE' || mode.id === 'VIBE_CODING') && (
+                                                        <span className="text-[8px] font-bold uppercase tracking-widest px-1 py-0.5 bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded">Pro</span>
+                                                      )}
+                                                    </div>
                                                     {mode.description && (
                                                       <span className="block text-[10px] text-muted-foreground/60 truncate font-normal mt-0.5">{mode.description}</span>
                                                     )}
@@ -1958,6 +2050,28 @@ export default function App() {
         </div>
 
         <div className="flex-1 overflow-y-auto layaa-scroll">
+          {/* Tier badge — Free shows upgrade CTA, Pro shows the perk badge */}
+          <div className="px-4 pt-4 pb-3 border-b border-border/50">
+            {tierState.tier === 'pro' ? (
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                <Sparkles size={13} className="text-amber-400" />
+                <span className="text-[12px] font-bold text-amber-300">Pro</span>
+                <span className="text-[10px] text-amber-400/60 ml-auto">unlimited</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setUpgradeReason(undefined); setUpgradeOpen(true); }}
+                className="w-full flex items-center gap-2 px-3 py-2 bg-surface-mid/40 hover:bg-primary/10 border border-border hover:border-primary/30 transition-all rounded-xl text-left group"
+              >
+                <Sparkles size={13} className="text-muted-foreground group-hover:text-primary transition-colors" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-bold text-foreground">Free plan</p>
+                  <p className="text-[10px] text-muted-foreground/70">5 chats / month · Upgrade →</p>
+                </div>
+              </button>
+            )}
+          </div>
+
           {/* Active Mode */}
           <div className="px-4 pt-4 pb-3 border-b border-border/50">
             <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-2">Active Mode</p>

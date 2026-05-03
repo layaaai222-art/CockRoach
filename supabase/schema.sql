@@ -66,9 +66,15 @@ create table if not exists public.chats (
   share_expires_at timestamp with time zone,
   share_revoked_at timestamp with time zone,
   project_id uuid references public.projects(id) on delete set null,
+  -- Chat-fork support: a forked chat references its parent and the
+  -- message at which the fork happened. Forks let a user explore
+  -- "what if I pivoted here" without losing the original thread.
+  parent_chat_id uuid references public.chats(id) on delete set null,
+  fork_point_message_id uuid,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+create index if not exists idx_chats_parent on public.chats(parent_chat_id) where parent_chat_id is not null;
 
 create table if not exists public.messages (
   id uuid primary key default gen_random_uuid(),

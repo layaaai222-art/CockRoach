@@ -36,13 +36,18 @@ fenced as ```preview``` with these properties:
 
 1. **Single self-contained HTML file** — everything inline. No
    external local files, no `import` from other modules, no `require`.
-2. **React 19 + Tailwind via CDN** — bring in:
+2. **React 18 + Tailwind via CDN** (use these exact URLs — known
+   working under sandboxed iframes):
    ```
-   <script src="https://unpkg.com/react@19/umd/react.production.min.js"></script>
-   <script src="https://unpkg.com/react-dom@19/umd/react-dom.production.min.js"></script>
+   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
    <script src="https://cdn.tailwindcss.com"></script>
-   <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
    ```
+   React 18 (not 19) because the React 19 UMD bundle has subtle
+   incompatibilities with `<script type="text/babel">` rendering in
+   sandboxed iframes. The crossorigin attribute is required for CDN
+   modules to evaluate inside null-origin iframes.
 3. **Babel-standalone** to support JSX in `<script type="text/babel">`.
 4. **Inter font + dark UI** by default unless the user asks
    otherwise. Apply `class="dark"` to `<html>` and use Tailwind dark
@@ -108,10 +113,10 @@ product?
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{App name}</title>
-  <script src="https://unpkg.com/react@19/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@19/umd/react-dom.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
@@ -127,7 +132,8 @@ product?
       // ... your full app component
     }
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
   </script>
 </body>
 </html>

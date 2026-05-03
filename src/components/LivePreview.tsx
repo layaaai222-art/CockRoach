@@ -42,6 +42,18 @@ export default function LivePreview({ htmlContent, title, projectId }: Props) {
   const [device, setDevice] = React.useState<Device>('desktop');
   const [iframeKey, setIframeKey] = React.useState(0);
 
+  // Use a blob URL so the iframe document gets a unique origin
+  // (cleaner than srcdoc for CDN script loading; still isolated from
+  // the parent app's localStorage / cookies).
+  const blobUrl = React.useMemo(() => {
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    return URL.createObjectURL(blob);
+  }, [htmlContent]);
+
+  React.useEffect(() => {
+    return () => { URL.revokeObjectURL(blobUrl); };
+  }, [blobUrl]);
+
   const handleDownload = () => {
     const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -180,10 +192,13 @@ export default function LivePreview({ htmlContent, title, projectId }: Props) {
         <div className="bg-zinc-950 flex justify-center overflow-x-auto p-3">
           <iframe
             key={iframeKey}
-            // sandbox without allow-same-origin keeps the preview unable to
-            // reach our cookies/localStorage. allow-scripts lets React run.
+            // Sandbox without allow-same-origin gives a unique origin —
+            // can't read our cookies/localStorage. allow-scripts is needed
+            // for React/Babel to execute. Using a blob URL (vs srcdoc)
+            // because some CDN bundles (Tailwind) misbehave inside
+            // srcdoc-rooted iframes.
             sandbox="allow-scripts allow-forms allow-popups allow-modals"
-            srcDoc={htmlContent}
+            src={blobUrl}
             title="Live preview"
             style={{ width: DEVICE_WIDTHS[device], height: '600px', border: 0, background: '#fff' }}
             className="rounded-md shadow-lg"

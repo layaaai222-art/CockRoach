@@ -77,10 +77,14 @@ export default function OnboardingWizard({ open, userId, userName, onClose, onPi
         onSaved={() => { /* memories refresh handled by parent via App-level launcher */ }}
       />
 
+      {/* Hide wizard backdrop entirely while FounderFit is open so they
+          don't visually stack and so closing FounderFit doesn't appear
+          to dismiss both. */}
+      {!showFounderFit && (
       <AnimatePresence>
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-4"
         >
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
@@ -241,6 +245,7 @@ export default function OnboardingWizard({ open, userId, userName, onClose, onPi
           </motion.div>
         </motion.div>
       </AnimatePresence>
+      )}
     </>
   );
 }
