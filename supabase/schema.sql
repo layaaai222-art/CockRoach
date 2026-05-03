@@ -306,6 +306,32 @@ grant all on table public.user_brand_kits to anon, authenticated;
 alter table public.users add column if not exists onboarding_completed_at timestamptz;
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- Idea library — auto-scraped from HN, ProductHunt, Reddit etc.
+-- Refreshed daily by /api/scrape-ideas (Vercel cron) + on-demand
+-- via the Ideas Library UI's manual refresh button.
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.scraped_ideas (
+  id uuid primary key default gen_random_uuid(),
+  source text not null,
+  source_id text,
+  title text not null,
+  url text,
+  excerpt text,
+  category text,
+  score int default 0,
+  comments_count int default 0,
+  posted_at timestamptz,
+  fetched_at timestamptz default timezone('utc'::text, now()) not null,
+  raw jsonb,
+  unique(source, source_id)
+);
+create index if not exists idx_scraped_ideas_source_posted on public.scraped_ideas(source, posted_at desc);
+create index if not exists idx_scraped_ideas_category on public.scraped_ideas(category);
+create index if not exists idx_scraped_ideas_fetched on public.scraped_ideas(fetched_at desc);
+alter table public.scraped_ideas disable row level security;
+grant all on table public.scraped_ideas to anon, authenticated;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- Triggers
 -- ─────────────────────────────────────────────────────────────────────────────
 create or replace function public.set_updated_at_now()

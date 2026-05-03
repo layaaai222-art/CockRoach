@@ -46,6 +46,8 @@ import {
   TrendingUp,
   Sparkles,
   Code,
+  Library,
+  MapPin,
 } from 'lucide-react';
 import DocumentViewer from './components/DocumentViewer';
 import { motion, AnimatePresence } from 'motion/react';
@@ -78,6 +80,8 @@ import InlineImageGen from './components/InlineImageGen';
 import LivePreview, { extractPreviewBlock } from './components/LivePreview';
 import UpgradeModal from './components/UpgradeModal';
 import { useTier, capabilitiesFor } from './hooks/useTier';
+import IdeasLibrary from './components/IdeasLibrary';
+import FounderJourney from './components/FounderJourney';
 
 // Map the active working mode → default decision category. Pre-fills the
 // form when the user clicks "Log decision" from the chat header.
@@ -208,7 +212,7 @@ export default function App() {
   const [isRouting, setIsRouting] = React.useState(false);
   const [isModeSelectOpen, setIsModeSelectOpen] = React.useState(false);
   const [modeSearch, setModeSearch] = React.useState('');
-  const [currentPage, setCurrentPage] = React.useState<'chat' | 'settings' | 'research' | 'memory' | 'projects'>('chat');
+  const [currentPage, setCurrentPage] = React.useState<'chat' | 'settings' | 'research' | 'memory' | 'projects' | 'ideas' | 'journey'>('chat');
   const [activeProjectId, setActiveProjectId] = React.useState<string | null>(null);
   const [logDecisionOpen, setLogDecisionOpen] = React.useState(false);
   // When the user clicks "Run framework" on a project, this is set to the
@@ -1197,6 +1201,34 @@ export default function App() {
           </button>
         </div>
 
+        {/* Discover — Library + Journey */}
+        <div className="px-3 pb-1 space-y-1">
+          <button
+            onClick={() => setCurrentPage('journey')}
+            className={cn(
+              'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-medium transition-all',
+              currentPage === 'journey'
+                ? 'bg-primary/10 text-primary border border-primary/20'
+                : 'text-muted-foreground hover:text-foreground hover:bg-card border border-transparent',
+            )}
+          >
+            <MapPin size={13} />
+            <span>Founder Journey</span>
+          </button>
+          <button
+            onClick={() => setCurrentPage('ideas')}
+            className={cn(
+              'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-medium transition-all',
+              currentPage === 'ideas'
+                ? 'bg-primary/10 text-primary border border-primary/20'
+                : 'text-muted-foreground hover:text-foreground hover:bg-card border border-transparent',
+            )}
+          >
+            <Library size={13} />
+            <span>Ideas Library</span>
+          </button>
+        </div>
+
         {/* Sidebar Navigation */}
         <div className="flex-1 overflow-y-auto px-3 py-1 space-y-6 layaa-scroll">
           <div className="pt-2">
@@ -1589,6 +1621,28 @@ export default function App() {
                 Review and modify your CockRoach neural memory embeddings.
               </p>
             </div>
+          ) : currentPage === 'ideas' ? (
+            <IdeasLibrary
+              onValidateIdea={(idea) => {
+                setActiveMode('IDEA_VALIDATION');
+                setInput(`I want to validate this idea I found on ${idea.source}: "${idea.title}".${idea.excerpt ? `\n\nDescription: ${idea.excerpt}` : ''}\n\nRun the 10-section intelligence report.`);
+                setCurrentPage('chat');
+              }}
+            />
+          ) : currentPage === 'journey' ? (
+            <FounderJourney
+              currentStage={activeProject?.stage ?? null}
+              onSelectMode={(modeId, prompt) => {
+                setActiveMode(modeId);
+                if (prompt) setInput(prompt);
+                setCurrentPage('chat');
+              }}
+              onSelectFramework={(fid) => {
+                setActiveFrameworkId(fid as FrameworkId);
+                setCurrentPage('chat');
+                toast.success('Framework primed — describe your project to run it');
+              }}
+            />
           ) : currentPage === 'projects' ? (
             activeProjectId && currentUser ? (
               <ProjectDetail

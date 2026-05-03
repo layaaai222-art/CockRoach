@@ -8,7 +8,7 @@ interface Args {
   currentUser: UserProfile | null;
   activeChatId: string | null;
   setActiveChatId: (id: string) => void;
-  setCurrentPage: (page: 'chat' | 'settings' | 'research' | 'memory' | 'projects') => void;
+  setCurrentPage: (page: 'chat' | 'settings' | 'research' | 'memory' | 'projects' | 'ideas' | 'journey') => void;
   setSharedChatBanner: (msg: string | null) => void;
   setSharedViewChatId: (id: string | null) => void;
 }
