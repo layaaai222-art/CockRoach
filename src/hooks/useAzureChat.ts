@@ -19,6 +19,14 @@ interface StreamOptions {
   userId?: string | null;
   chatId?: string | null;
   projectId?: string | null;
+  /** Override max_completion_tokens cap. Server enforces an upper bound. */
+  maxTokens?: number;
+}
+
+export interface StreamResult {
+  content: string;
+  /** Azure's finish_reason from the last chunk: 'stop' | 'length' | 'content_filter' | etc. */
+  finishReason: string | null;
 }
 
 /**
@@ -41,7 +49,7 @@ export function useAzureChat() {
     setIsStreaming(false);
   }, []);
 
-  const streamResponse = React.useCallback(async ({ messages, temperature = 0.7, onChunk, userId, chatId, projectId }: StreamOptions): Promise<string> => {
+  const streamResponse = React.useCallback(async ({ messages, temperature = 0.7, onChunk, userId, chatId, projectId, maxTokens }: StreamOptions): Promise<StreamResult> => {
     // Abort any prior in-flight stream — only one generation at a time
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -52,7 +60,7 @@ export function useAzureChat() {
       const resp = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, temperature, userId, chatId, projectId }),
+        body: JSON.stringify({ messages, temperature, userId, chatId, projectId, max_tokens: maxTokens }),
         signal: controller.signal,
       });
 
@@ -69,6 +77,7 @@ export function useAzureChat() {
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let full = '';
+      let finishReason: string | null = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -85,6 +94,10 @@ export function useAzureChat() {
               full += delta;
               onChunk(full);
             }
+            // Capture finish_reason — Azure emits it on the last
+            // non-empty choice chunk (with delta empty + finish_reason set).
+            const fr = parsed.choices?.[0]?.finish_reason;
+            if (typeof fr === 'string' && fr) finishReason = fr;
             if (parsed.usage) {
               setSessionTokens(prev => ({
                 prompt: prev.prompt + (parsed.usage.prompt_tokens ?? 0),
@@ -96,11 +109,11 @@ export function useAzureChat() {
           }
         }
       }
-      return full;
+      return { content: full, finishReason };
     } catch (e) {
       if ((e as Error).name === 'AbortError') {
         logger.debug('Chat stream aborted by user');
-        return '';
+        return { content: '', finishReason: 'aborted' };
       }
       throw e;
     } finally {

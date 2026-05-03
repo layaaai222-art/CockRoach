@@ -244,7 +244,7 @@ export default function App() {
 
   // Chat State
   const [input, setInput] = React.useState('');
-  const [messages, setMessages] = React.useState<{ id?: string, role: 'user' | 'assistant', content: string, rawText?: string, isSummary?: boolean, capabilities?: { mode?: string; framework?: string; routed?: boolean } }[]>([]);
+  const [messages, setMessages] = React.useState<{ id?: string, role: 'user' | 'assistant', content: string, rawText?: string, isSummary?: boolean, capabilities?: { mode?: string; framework?: string; routed?: boolean; finishReason?: string } }[]>([]);
   const [isTyping, setIsTyping] = React.useState(false);
   const [streamingContent, setStreamingContent] = React.useState('');
   const chatScrollRef = React.useRef<HTMLDivElement>(null);
@@ -425,7 +425,7 @@ export default function App() {
   }, [isMobile]);
 
   const streamAzureResponse = React.useCallback(
-    (apiMessages: { role: string; content: string }[], onChunk: (text: string) => void) =>
+    (apiMessages: { role: string; content: string }[], onChunk: (text: string) => void, opts?: { maxTokens?: number }) =>
       streamResponse({
         messages: apiMessages,
         temperature: 0.7,
@@ -433,6 +433,7 @@ export default function App() {
         userId: currentUser?.id ?? null,
         chatId: activeChatId ?? null,
         projectId: activeProjectId ?? null,
+        maxTokens: opts?.maxTokens,
       }),
     [streamResponse, currentUser?.id, activeChatId, activeProjectId],
   );
@@ -709,9 +710,15 @@ export default function App() {
       ];
 
       setIsTyping(false);
-      const fullContent = await streamAzureResponse(apiMessages, (partial) => {
-        setStreamingContent(partial);
-      });
+      // Vibe-coding apps need more output room (full single-page HTML
+      // is often 8-12 K tokens). For other modes the server-side cap
+      // is fine.
+      const isVibeCoding = resolvedMode === 'VIBE_CODING';
+      const { content: fullContent, finishReason } = await streamAzureResponse(
+        apiMessages,
+        (partial) => setStreamingContent(partial),
+        isVibeCoding ? { maxTokens: 16000 } : undefined,
+      );
       setStreamingContent('');
       setUrlPreviews(new Map());
 
@@ -729,8 +736,15 @@ export default function App() {
           mode: resolvedMode,
           framework: frameworkUsed ?? undefined,
           routed: activeMode === 'AUTO',
+          finishReason: finishReason ?? undefined,
         },
       }]);
+
+      // If LLM hit token limit on a vibe-coding response, the user
+      // probably wants the rest. Show a non-blocking toast hint.
+      if (finishReason === 'length' && isVibeCoding) {
+        toast('Response was cut off — click Continue below to get the rest.', { duration: 6000 });
+      }
 
       // Idea detection — offer full analysis if the user described a startup idea
       if (!overrideText && textInput && detectStartupIdea(textInput)) {
@@ -866,7 +880,7 @@ export default function App() {
       `Summarize the following document. Output exactly this format:\n\n**Document Summary:**\n\n**Key Points:**\n- point 1\n- point 2\n- point 3\n\n**Key Insights:**\n[2-3 sentences of high-signal takeaways and trends]\n\nBe concise. No fluff.${ctxHint}\n\n---\nDOCUMENT:\n${content.slice(0, 5500)}`;
 
     try {
-      const fullContent = await streamAzureResponse(
+      const { content: fullContent } = await streamAzureResponse(
         [
           { role: 'system', content: 'You are a precise document summarizer. Output only the requested format.' },
           { role: 'user', content: summaryPrompt },
@@ -891,6 +905,69 @@ export default function App() {
     } finally {
       setIsTyping(false);
       setStreamingContent('');
+    }
+  };
+
+  // Continue a truncated assistant message. Sends a continuation prompt,
+  // streams the rest, appends it to the existing message (DB + state)
+  // so users see ONE coherent response instead of two stitched bubbles.
+  // Mirrors Claude's "Continue" tool when output runs into the token cap.
+  const [continuingMsgIdx, setContinuingMsgIdx] = React.useState<number | null>(null);
+  const handleContinueMessage = async (idx: number) => {
+    if (!currentUser || !activeChatId || isStreaming || isTyping) return;
+    const target = messages[idx];
+    if (!target || target.role !== 'assistant') return;
+
+    setContinuingMsgIdx(idx);
+    try {
+      // Build a context-rich continuation prompt. The system prompt
+      // tells the LLM to NOT restart, NOT add preamble, just continue
+      // mid-token from where it stopped. We slice the last ~1000 chars
+      // of the previous output as the explicit continuation anchor.
+      const tail = target.content.slice(-1500);
+      const continuationMessages = [
+        ...messages.slice(0, idx).map(m => ({ role: m.role, content: m.rawText || m.content })),
+        { role: 'assistant', content: target.content },
+        {
+          role: 'user',
+          content: `Your previous response was truncated by the token limit. Continue EXACTLY from where you stopped — output ONLY the missing remainder, no preamble, no apology, no repetition. Do not start over. The very last characters you produced were:\n\n---\n${tail}\n---\n\nResume now and finish.`,
+        },
+      ];
+
+      const isVibe = target.capabilities?.mode === 'VIBE_CODING';
+      let appended = '';
+      const { content: extra, finishReason: newFinish } = await streamAzureResponse(
+        continuationMessages,
+        (partial) => {
+          appended = partial;
+          // Live-stream the continuation into the existing message
+          setMessages(prev => prev.map((m, i) => i === idx ? { ...m, content: target.content + partial } : m));
+        },
+        isVibe ? { maxTokens: 16000 } : undefined,
+      );
+
+      const merged = target.content + (extra || appended);
+
+      // Persist the merged content + cleared finishReason (or new one if
+      // truncated AGAIN — user can keep clicking Continue).
+      if (target.id) {
+        await supabase.from('messages').update({ content: merged }).eq('id', target.id);
+      }
+      setMessages(prev => prev.map((m, i) => i === idx ? {
+        ...m,
+        content: merged,
+        capabilities: { ...m.capabilities, finishReason: newFinish ?? undefined },
+      } : m));
+
+      if (newFinish === 'length') {
+        toast('Still more to come — click Continue again.', { duration: 4000 });
+      } else {
+        toast.success('Continued');
+      }
+    } catch (e) {
+      toast.error(`Continue failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setContinuingMsgIdx(null);
     }
   };
 
@@ -1604,8 +1681,14 @@ export default function App() {
                                       below — avoids showing the same code
                                       twice in the bubble. */}
                                   {msg.capabilities?.mode === 'VIBE_CODING'
-                                    ? msg.content.replace(/```preview\s*\n[\s\S]+?\n```/g, '')
-                                                  .replace(/```html\s*\n[\s\S]+?\n```/g, '')
+                                    ? msg.content
+                                        // closed blocks
+                                        .replace(/```preview\s*\n[\s\S]+?\n```/g, '')
+                                        .replace(/```html\s*\n[\s\S]+?\n```/g, '')
+                                        // unclosed (truncated) blocks — strip from fence to end
+                                        .replace(/```preview\s*\n[\s\S]+$/g, '')
+                                        .replace(/```html\s*\n[\s\S]+$/g, '')
+                                        .trim()
                                     : msg.content}
                                 </ReactMarkdown>
                               </div>
@@ -1644,6 +1727,23 @@ export default function App() {
                                 />
                               ) : null;
                             })()}
+                            {/* Continue-from-truncation prompt — surfaced when
+                                the LLM hit the token cap mid-response. Clicking
+                                merges the rest into THIS message, not a new one. */}
+                            {msg.capabilities?.finishReason === 'length' && (
+                              <button
+                                onClick={() => handleContinueMessage(i)}
+                                disabled={continuingMsgIdx === i || isStreaming || isTyping}
+                                className="mt-3 flex items-center gap-2 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-amber-300 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 disabled:opacity-50 transition-all rounded-md w-full sm:w-auto"
+                                title="LLM hit the response length limit — pick up where it left off and merge into this same message"
+                              >
+                                {continuingMsgIdx === i ? (
+                                  <><RefreshCw size={11} className="animate-spin" /> Continuing…</>
+                                ) : (
+                                  <><RefreshCw size={11} /> Continue — response was cut off by the token limit</>
+                                )}
+                              </button>
+                            )}
                             {/* Action bar — CSS group-hover for reliable click */}
                             <div className="flex items-center gap-0.5 mt-1.5 pl-1 transition-opacity duration-150 opacity-0 group-hover/msg:opacity-100 pointer-events-none group-hover/msg:pointer-events-auto">
                               {([

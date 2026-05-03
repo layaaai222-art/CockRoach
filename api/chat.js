@@ -49,10 +49,11 @@ const MAX_MESSAGES = 100;
 const MAX_CHARS_PER_MESSAGE = 300_000;
 const MAX_TOTAL_CHARS = 600_000;
 
-// Ceiling on completion tokens. Prevents a runaway prompt from generating
-// unbounded output (→ unbounded Azure bill). Chat interactions rarely need
-// more than ~2K tokens; 4K is a comfortable ceiling.
-const MAX_COMPLETION_TOKENS = 4000;
+// Ceiling on completion tokens. Vibe-coding emits full single-file
+// HTML apps (typically 4-12 K tokens), so we raised this from the
+// original 4 K. Still bounded to keep runaway prompts from racking up
+// unbounded Azure bills.
+const MAX_COMPLETION_TOKENS = 16000;
 
 // Rough Azure pricing for cost estimation (gpt-5.3-class deployments,
 // USD per 1K tokens). Approximate; the dashboard is for trend-watching,
