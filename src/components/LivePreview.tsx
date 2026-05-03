@@ -7,7 +7,7 @@
 //   - Toggle View Code / Visual
 
 import React from 'react';
-import { Download, Save, Code2, ExternalLink, Smartphone, Monitor, Tablet, RefreshCw } from 'lucide-react';
+import { Download, Save, Code2, ExternalLink, Smartphone, Monitor, Tablet, RefreshCw, Pause, Play } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../lib/supabase';
 import { cn } from '../lib/utils';
@@ -16,7 +16,15 @@ interface Props {
   htmlContent: string;
   title?: string;
   projectId?: string | null;
+  /**
+   * If true, the LLM is still generating. We throttle iframe refreshes
+   * to ~1.5s and switch to a live-streaming visual indicator.
+   * (DeepSite-style live preview pattern.)
+   */
+  isStreaming?: boolean;
 }
+
+const STREAM_THROTTLE_MS = 1500;
 
 type Device = 'mobile' | 'tablet' | 'desktop';
 const DEVICE_WIDTHS: Record<Device, string> = {
@@ -27,28 +35,79 @@ const DEVICE_WIDTHS: Record<Device, string> = {
 
 /**
  * Extract the inside of the first ```preview ... ``` fenced block.
- * Returns null if the block isn't found.
+ * Returns null if the block hasn't started yet.
+ *
+ * IMPORTANT: while the LLM is streaming, we get unclosed blocks. This
+ * function returns the partial body so the iframe can render in real
+ * time. The caller decides whether to throttle.
  */
 export function extractPreviewBlock(text: string): string | null {
-  const match = text.match(/```preview\s*\n([\s\S]+?)\n```/);
-  if (match) return match[1];
-  // Fallback: if the agent uses ```html instead, accept that too.
-  const fallback = text.match(/```html\s*\n([\s\S]+?)\n```/);
-  return fallback ? fallback[1] : null;
+  // Closed block (preferred — final output)
+  const closed = text.match(/```preview\s*\n([\s\S]+?)\n```/);
+  if (closed) return closed[1];
+
+  const closedHtml = text.match(/```html\s*\n([\s\S]+?)\n```/);
+  if (closedHtml) return closedHtml[1];
+
+  // Streaming: look for a started-but-unclosed block.
+  const openIdx = text.search(/```(?:preview|html)\s*\n/);
+  if (openIdx === -1) return null;
+  const afterFence = text.slice(openIdx).replace(/^```(?:preview|html)\s*\n/, '');
+  // Strip any trailing partial code fence so it doesn't break parsing
+  const cleaned = afterFence.replace(/```\s*$/, '');
+  // Only return if there's enough content to be meaningful (>200 chars
+  // means we have at least the head). Avoids re-rendering on every
+  // single token while just the fence opens.
+  return cleaned.length > 200 ? cleaned : null;
 }
 
-export default function LivePreview({ htmlContent, title, projectId }: Props) {
+export default function LivePreview({ htmlContent, title, projectId, isStreaming = false }: Props) {
   const [view, setView] = React.useState<'visual' | 'code'>('visual');
   const [device, setDevice] = React.useState<Device>('desktop');
   const [iframeKey, setIframeKey] = React.useState(0);
+  const [autoRefresh, setAutoRefresh] = React.useState(true);
+
+  // Throttled HTML — only updates the iframe-rendered content every
+  // STREAM_THROTTLE_MS while the LLM is generating, then immediately on
+  // completion. Prevents re-mount thrash + flicker during streaming.
+  const [renderHtml, setRenderHtml] = React.useState(htmlContent);
+  const lastUpdateRef = React.useRef<number>(0);
+  const wasStreamingRef = React.useRef(isStreaming);
+
+  React.useEffect(() => {
+    // Always update when stream completes, regardless of throttle.
+    if (wasStreamingRef.current && !isStreaming) {
+      setRenderHtml(htmlContent);
+      lastUpdateRef.current = Date.now();
+      wasStreamingRef.current = isStreaming;
+      return;
+    }
+    wasStreamingRef.current = isStreaming;
+
+    if (!autoRefresh && isStreaming) return;
+
+    const now = Date.now();
+    const minGap = isStreaming ? STREAM_THROTTLE_MS : 0;
+    if (now - lastUpdateRef.current >= minGap) {
+      setRenderHtml(htmlContent);
+      lastUpdateRef.current = now;
+      return;
+    }
+    const delay = minGap - (now - lastUpdateRef.current);
+    const id = setTimeout(() => {
+      setRenderHtml(htmlContent);
+      lastUpdateRef.current = Date.now();
+    }, delay);
+    return () => clearTimeout(id);
+  }, [htmlContent, isStreaming, autoRefresh]);
 
   // Use a blob URL so the iframe document gets a unique origin
   // (cleaner than srcdoc for CDN script loading; still isolated from
   // the parent app's localStorage / cookies).
   const blobUrl = React.useMemo(() => {
-    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    const blob = new Blob([renderHtml], { type: 'text/html;charset=utf-8' });
     return URL.createObjectURL(blob);
-  }, [htmlContent]);
+  }, [renderHtml]);
 
   React.useEffect(() => {
     return () => { URL.revokeObjectURL(blobUrl); };
@@ -134,6 +193,12 @@ export default function LivePreview({ htmlContent, title, projectId }: Props) {
         <div className="flex items-center gap-1">
           {view === 'visual' && (
             <>
+              {isStreaming && (
+                <div className="flex items-center gap-1 mr-1.5 px-2 py-0.5 bg-primary/15 border border-primary/30 rounded text-[10px] font-bold uppercase tracking-widest text-primary animate-pulse">
+                  <span className="w-1.5 h-1.5 bg-primary rounded-full" />
+                  Generating
+                </div>
+              )}
               <div className="flex items-center gap-0.5 mr-1.5 border-r border-border/40 pr-1.5">
                 {(['mobile', 'tablet', 'desktop'] as const).map(d => {
                   const Icon = d === 'mobile' ? Smartphone : d === 'tablet' ? Tablet : Monitor;
@@ -152,6 +217,15 @@ export default function LivePreview({ htmlContent, title, projectId }: Props) {
                   );
                 })}
               </div>
+              {isStreaming && (
+                <button
+                  onClick={() => setAutoRefresh(a => !a)}
+                  className="p-1 text-muted-foreground/60 hover:text-foreground transition-colors rounded"
+                  title={autoRefresh ? 'Pause live updates' : 'Resume live updates'}
+                >
+                  {autoRefresh ? <Pause size={11} /> : <Play size={11} />}
+                </button>
+              )}
               <button
                 onClick={() => setIframeKey(k => k + 1)}
                 className="p-1 text-muted-foreground/60 hover:text-foreground transition-colors rounded"

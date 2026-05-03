@@ -1708,21 +1708,43 @@ export default function App() {
                   ))}
 
                   {/* Streaming bubble */}
-                  {streamingContent && (
-                    <div className="flex items-start gap-2 sm:gap-3 px-2 sm:px-4 py-1">
-                      <div className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center bg-background border border-border mt-1">
-                        <Bot size={13} className="text-primary" />
-                      </div>
-                      <div className="flex-1 max-w-[96%] sm:max-w-[82%] bg-card border border-primary/10 rounded-2xl rounded-tl-sm px-3 sm:px-4 py-3 min-w-0">
-                        <div className="prose-cockroach">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
-                            {streamingContent}
-                          </ReactMarkdown>
+                  {streamingContent && (() => {
+                    // For VIBE_CODING: extract the partial preview block
+                    // and stream it into the LivePreview iframe live.
+                    // The displayed markdown skips the same fence so the
+                    // user doesn't see the in-progress code as text.
+                    const isVibe = (activeMode === 'VIBE_CODING') ||
+                      (activeMode === 'AUTO' && routedMode?.id === 'VIBE_CODING');
+                    const streamHtml = isVibe ? extractPreviewBlock(streamingContent) : null;
+                    const displayed = isVibe
+                      ? streamingContent
+                          .replace(/```preview\s*\n[\s\S]+?(?:\n```|$)/g, '')
+                          .replace(/```html\s*\n[\s\S]+?(?:\n```|$)/g, '')
+                      : streamingContent;
+                    return (
+                      <div className="flex items-start gap-2 sm:gap-3 px-2 sm:px-4 py-1">
+                        <div className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center bg-background border border-border mt-1">
+                          <Bot size={13} className="text-primary" />
                         </div>
-                        <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom" />
+                        <div className="flex-1 max-w-[96%] sm:max-w-[82%] bg-card border border-primary/10 rounded-2xl rounded-tl-sm px-3 sm:px-4 py-3 min-w-0">
+                          <div className="prose-cockroach">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
+                              {displayed}
+                            </ReactMarkdown>
+                          </div>
+                          <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom" />
+                          {streamHtml && (
+                            <LivePreview
+                              htmlContent={streamHtml}
+                              title={`Vibe app · ${activeProject?.name ?? 'sandbox'}`}
+                              projectId={activeProjectId}
+                              isStreaming={true}
+                            />
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Typing dots — waiting for first chunk */}
                   {isTyping && !streamingContent && (
